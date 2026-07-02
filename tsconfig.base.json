@@ -1,21 +1,22 @@
 {
+  "compileOnSave": false,
   "compilerOptions": {
-    "composite": true,
-    "declarationMap": true,
-    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "bundler",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
     "importHelpers": true,
-    "isolatedModules": true,
-    "lib": ["es2022"],
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "noEmitOnError": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "dom", "dom.iterable"],
     "skipLibCheck": true,
-    "strict": true,
-    "target": "es2022",
-    "customConditions": ["@hali/source"]
-  }
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@hali/types": ["packages/types/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp", "dist"]
 }

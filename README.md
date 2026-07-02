@@ -1,109 +1,126 @@
-# Hali
+# HALI
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+HALI is a hackathon-speed production-shaped early warning system for East Africa. It combines FastAPI, PostGIS, Claude processing, USSD, and a React/Vite PWA for alert feeds, maps, action cards, and community reports.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## Resolved Tooling Versions
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/js?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+| Tool | Version |
+| --- | --- |
+| Node | 22.19.0 |
+| npm | 11.6.2 |
+| Python local | 3.12.3 |
+| Python production target | 3.13.x |
+| Poetry | 2.4.1 |
+| Nx / @nx/react / @nx/vite / @nx/vitest | 23.0.1 |
+| @nxlv/python | 22.2.1 |
+| React | 19.2.7 |
+| Vite | 8.1.3 |
+| FastAPI | 0.139.0 |
+| Uvicorn | 0.49.0 |
+| asyncpg | 0.31.0 |
+| anthropic | 0.116.0 |
+| Alembic | 1.18.5 |
 
-## Generate a library
+Python 3.13 was requested but is not installed on this machine, so local verification used Python 3.12.3 with code constrained to `>=3.12,<3.14`.
 
-```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@my-org/pkg1
+## Features
+
+Languages: `sw`, `so`, `am`, `om`, `ar`, `en`. Livelihoods: `farmer`, `pastoralist`, `fisherfolk`, `urban`. Hazards: `flood`, `drought`, `locust`, `cyclone`, `health`, `other`. Severities: `green`, `orange`, `red`.
+
+Backend endpoints: `/`, `/health`, `/ready`, `/api/alerts`, `/api/alerts/geojson`, `/api/alerts/{alert_id}/action-card`, `/api/reports`, `/api/reports/heatmap`, `/ussd`.
+
+## Local Setup
+
+Prerequisites:
+
+- Node.js 22 LTS and npm
+- Python 3.12 or 3.13
+- Poetry 2.x
+- Docker with Compose
+
+Clone and install dependencies:
+
+```bash
+git clone git@github.com:mamuga/hali.git
+cd hali
+npm install
+cd apps/backend
+poetry install
+cd ../..
 ```
 
-## Run tasks
+Create your local environment file:
 
-To build the library use:
-
-```sh
-npx nx build pkg1
+```bash
+cp .env.example .env
 ```
 
-To run any task with Nx use:
+Start PostGIS:
 
-```sh
-npx nx <target> <project-name>
+```bash
+docker compose up -d postgres
+docker compose ps
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+The checked-in compose file maps PostGIS to host port `5433` to avoid collisions with a local Postgres on `5432`. The matching local URLs are already in `.env.example`:
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Versioning and releasing
-
-To version and release the library use
-
-```
-npx nx release
+```env
+DATABASE_URL=postgresql+asyncpg://hali:hali@localhost:5433/hali
+MIGRATION_DATABASE_URL=postgresql://hali:hali@localhost:5433/hali
 ```
 
-Pass `--dry-run` to see what would happen without actually releasing the library.
+Run migrations:
 
-[Learn more about Nx release &raquo;](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Keep TypeScript project references up to date
-
-Nx automatically updates TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) in `tsconfig.json` files to ensure they remain accurate based on your project dependencies (`import` or `require` statements). This sync is automatically done when running tasks such as `build` or `typecheck`, which require updated references to function correctly.
-
-To manually trigger the process to sync the project graph dependencies information to the TypeScript project references, run the following command:
-
-```sh
-npx nx sync
+```bash
+cd apps/backend
+poetry run alembic upgrade head
+cd ../..
 ```
 
-You can enforce that the TypeScript project references are always in the correct state when running in CI by adding a step to your CI job configuration that runs the following command:
+Run the backend and frontend in separate terminals:
 
-```sh
-npx nx sync:check
+```bash
+npx nx run backend:serve
 ```
 
-[Learn more about nx sync](https://nx.dev/reference/nx-commands#sync)
-
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
-
-```sh
-npx nx connect
+```bash
+npx nx run frontend:serve
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+Open the frontend at `http://localhost:5173`. The API runs at `http://localhost:8000`; quick checks are:
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+curl http://localhost:8000/api/alerts
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Run verification checks:
 
-## Install Nx Console
+```bash
+npx nx run backend:lint
+npx nx run backend:typecheck
+npx nx run backend:test
+npx nx run frontend:build
+npx nx run-many -t build --all
+```
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+## Ingestion and AI
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+GDACS is enabled by default and ingests the East Africa bounding box. CHIRPS, GFS, GloFAS, and ICPAC adapters are disabled by default and fail clearly if enabled without source-specific endpoint or credential configuration. Claude translation, action-card generation, and report labels run only when `ANTHROPIC_API_KEY` is configured; otherwise reports store empty labels and adapters/tests still pass.
 
-## Useful links
+## USSD
 
-Learn more:
+Configure Africa's Talking to POST to `/ussd`. The flow uses `CON` for continuing menus and `END` for terminal responses.
 
-- [Learn more about this workspace setup](https://nx.dev/nx-api/js?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Data Boundaries
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+`sql/migrations/003_seed_igad_countries.sql` uses bounding-box polygons for Kenya, Ethiopia, Somalia, Uganda, Djibouti, Eritrea, Sudan, and South Sudan. Replace them with Natural Earth boundaries using `ogr2ogr` as documented in that migration.
+
+## Railway
+
+See `infra/railway.md`. Use Railway Postgres with PostGIS, run SQL mirrors or Alembic, set required env vars, and deploy backend with `uvicorn hali.main:app --host 0.0.0.0 --port $PORT`. Build frontend with `VITE_API_URL` pointing to the backend.
+
+## Known Limitations
+
+External live ingestion quality depends on GDACS RSS content. Claude, Africa's Talking, and disabled climate/hydrology adapters require real credentials or source details before production use.

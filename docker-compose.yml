@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgis/postgis:latest
+    environment:
+      POSTGRES_USER: hali
+      POSTGRES_PASSWORD: hali
+      POSTGRES_DB: hali
+    ports:
+      - "5433:5432"
+    volumes:
+      - hali_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hali -d hali"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  hali_postgres_data:
