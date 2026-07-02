@@ -31,20 +31,48 @@ Backend endpoints: `/`, `/health`, `/ready`, `/api/alerts`, `/api/alerts/geojson
 
 ## Local Setup
 
+HALI is intended to run on macOS and Linux. Windows is not a target for the local scripts because the backend Nx targets use POSIX-style environment variables such as `PYTHONPATH=src`.
+
 Prerequisites:
 
 - Node.js 22 LTS and npm
 - Python 3.12 or 3.13
-- Poetry 2.x
-- Docker with Compose
+- Poetry 2.x available as `poetry` on your shell `PATH`
+- Docker Desktop on macOS, or Docker Engine with the Compose plugin on Linux
 
-Clone and install dependencies:
+Install prerequisites on macOS with Homebrew:
+
+```bash
+brew install node@22 python@3.12 poetry
+brew link node@22
+```
+
+Install prerequisites on Ubuntu/Linux:
+
+```bash
+# Install Node 22 with your preferred Node manager, for example nvm:
+nvm install 22
+nvm use 22
+
+# Install Poetry after Python is available:
+curl -sSL https://install.python-poetry.org | python3 -
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Clone the private repository. Use SSH if your GitHub key is configured, otherwise use HTTPS:
 
 ```bash
 git clone git@github.com:mamuga/hali.git
+# or: git clone https://github.com/mamuga/hali.git
 cd hali
+```
+
+Install dependencies:
+
+```bash
 npm install
 cd apps/backend
+poetry env use python3.12 || poetry env use python3
 poetry install
 cd ../..
 ```
@@ -72,19 +100,17 @@ MIGRATION_DATABASE_URL=postgresql://hali:hali@localhost:5433/hali
 Run migrations:
 
 ```bash
-cd apps/backend
-poetry run alembic upgrade head
-cd ../..
+npm run backend:migrate
 ```
 
 Run the backend and frontend in separate terminals:
 
 ```bash
-npx nx run backend:serve
+npm run backend:serve
 ```
 
 ```bash
-npx nx run frontend:serve
+npm run frontend:serve
 ```
 
 Open the frontend at `http://localhost:5173`. The API runs at `http://localhost:8000`; quick checks are:
@@ -98,12 +124,14 @@ curl http://localhost:8000/api/alerts
 Run verification checks:
 
 ```bash
-npx nx run backend:lint
-npx nx run backend:typecheck
-npx nx run backend:test
-npx nx run frontend:build
-npx nx run-many -t build --all
+npm run verify
 ```
+
+Troubleshooting:
+
+- If `poetry` is not found, add Poetry to your shell PATH and reopen the terminal. On Linux this is usually `export PATH="$HOME/.local/bin:$PATH"`.
+- If Docker says port `5433` is already in use, change the host side in `docker-compose.yml`, then update `DATABASE_URL` and `MIGRATION_DATABASE_URL` in `.env` to match.
+- If `poetry env use python3.12` fails on macOS, install Python 3.12 with Homebrew or pyenv, then rerun `poetry install`.
 
 ## Ingestion and AI
 

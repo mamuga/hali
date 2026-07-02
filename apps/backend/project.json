@@ -4,13 +4,58 @@
   "sourceRoot": "apps/backend/src",
   "projectType": "application",
   "targets": {
-    "serve": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH PYTHONPATH=src poetry run uvicorn hali.main:app --host 0.0.0.0 --port 8000 --reload"}},
-    "test": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "HALI_TEST_MODE=true PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run pytest"}},
-    "lint": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run ruff check src tests"}},
-    "format": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run black src tests"}},
-    "typecheck": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run mypy src"}},
-    "migrate": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run alembic upgrade head"}},
-    "migration-create": {"executor": "nx:run-commands", "options": {"cwd": "apps/backend", "command": "PATH=/home/muga/.local/poetry-venv/bin:$PATH poetry run alembic revision -m"}}
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "PYTHONPATH=src poetry run uvicorn hali.main:app --host 0.0.0.0 --port 8000 --reload"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "HALI_TEST_MODE=true poetry run pytest"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "poetry run ruff check src tests"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "poetry run black src tests"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "poetry run mypy src"
+      }
+    },
+    "migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "poetry run alembic upgrade head"
+      }
+    },
+    "migration-create": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/backend",
+        "command": "poetry run alembic revision -m"
+      }
+    }
   },
-  "tags": ["scope:backend", "type:api"]
+  "tags": [
+    "scope:backend",
+    "type:api"
+  ]
 }

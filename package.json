@@ -2,7 +2,17 @@
   "name": "@hali/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "backend:serve": "nx run backend:serve",
+    "backend:lint": "nx run backend:lint",
+    "backend:typecheck": "nx run backend:typecheck",
+    "backend:test": "nx run backend:test",
+    "backend:migrate": "nx run backend:migrate",
+    "frontend:serve": "nx run frontend:serve",
+    "frontend:build": "nx run frontend:build",
+    "build": "nx run-many -t build --all",
+    "verify": "nx run backend:lint && nx run backend:typecheck && nx run backend:test && nx run frontend:build && nx run-many -t build --all"
+  },
   "private": true,
   "devDependencies": {
     "@nx/js": "23.0.1",
