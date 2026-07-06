@@ -1,64 +1,118 @@
-import json
-import xml.etree.ElementTree as ET
-from datetime import UTC, datetime, timedelta
+"""GDACS REST adapter for current East Africa disaster alerts."""
+from __future__ import annotations
 
-import asyncpg
+from datetime import timedelta
+from typing import Any
+
 import httpx
 import structlog
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from hali.config import Settings
-from hali.ingestion.base import AdapterStatus, NormalizedAlert
-from hali.ingestion.normaliser import dedup_hash, hazard, severity
+from hali.config import settings
 
-log = structlog.get_logger()
-EAST_AFRICA_BBOX_POLYGON = {"type":"MultiPolygon","coordinates":[[[[21,-12],[52,-12],[52,24],[21,24],[21,-12]]]]}
-IGAD_COUNTRY_CODES = ["KE", "ET", "SO", "UG", "DJ", "ER", "SD", "SS"]
+from .base import BaseAdapter
+from .models import GeoJSONGeometry, HazardType, NormalisedAlert, RawPayload, Severity, SourceName, ValidatedAlert
+from .normaliser import GDACS_HAZARD_MAP, GDACS_SEVERITY_MAP, parse_iso_datetime, to_multipolygon_geojson, utc_now
+
+logger = structlog.get_logger(__name__)
+GDACS_SEARCH_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH"
 
 
-class GdacsAdapter:
-    source = "gdacs"
+class GdacsAdapter(BaseAdapter):
+    source = SourceName.GDACS
 
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-
-    async def status(self) -> AdapterStatus:
-        return AdapterStatus(self.source, self.settings.enable_gdacs, "enabled" if self.settings.enable_gdacs else "disabled", "GDACS RSS East Africa bbox")
-
-    async def fetch(self) -> list[NormalizedAlert]:
-        if not self.settings.enable_gdacs:
+    async def extract(self) -> list[RawPayload]:
+        try:
+            features = await self._fetch_with_retry()
+            return [
+                RawPayload(
+                    source=self.source,
+                    raw_data=feature,
+                    source_event_id=str(feature.get("properties", {}).get("eventid", "unknown")),
+                )
+                for feature in features
+            ]
+        except Exception as exc:
+            logger.error("gdacs.extract_failed", error=str(exc))
             return []
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.get(self.settings.gdacs_url)
-            response.raise_for_status()
-        root = ET.fromstring(response.text)
-        alerts: list[NormalizedAlert] = []
-        for item in root.findall(".//item"):
-            title = item.findtext("title") or "GDACS alert"
-            link = item.findtext("link") or ""
-            category = item.findtext("category") or title
-            pub_date = datetime.now(UTC).isoformat()
-            payload = {"title": title, "link": link, "category": category}
-            alerts.append(NormalizedAlert(self.source, link or title, hazard(category), severity(title), IGAD_COUNTRY_CODES, EAST_AFRICA_BBOX_POLYGON, pub_date, (datetime.now(UTC)+timedelta(days=7)).isoformat(), payload))
-        return alerts
 
-    async def ingest(self, pool: asyncpg.Pool) -> int:
-        count = 0
-        for alert in await self.fetch():
-            raw_id = None
-            async with pool.acquire() as conn:
-                raw_id = await conn.fetchval("INSERT INTO raw_ingestion (source, external_id, payload) VALUES ($1,$2,$3::jsonb) RETURNING id", alert.source, alert.external_id, json.dumps(alert.payload))
-                try:
-                    await conn.execute(
-                        """
-                        INSERT INTO alerts (raw_ingestion_id, hazard_type, severity, affected_countries, geom, valid_from, valid_to, dedup_hash, source, source_url)
-                        VALUES ($1,$2,$3,$4,ST_Multi(ST_GeomFromGeoJSON($5)), $6::timestamptz, $7::timestamptz, $8, $9, $10)
-                        ON CONFLICT (dedup_hash) DO NOTHING
-                        """,
-                        raw_id, alert.hazard_type, alert.severity, alert.affected_countries, json.dumps(alert.geometry_geojson), alert.valid_from, alert.valid_to, dedup_hash(alert.payload), alert.source, alert.payload.get("link"),
-                    )
-                    await conn.execute("UPDATE raw_ingestion SET status='processed', processed_at=NOW() WHERE id=$1", raw_id)
-                    count += 1
-                except Exception as exc:
-                    await conn.execute("UPDATE raw_ingestion SET status='failed', error=$2 WHERE id=$1", raw_id, str(exc))
-                    log.exception("gdacs_ingest_failed", raw_id=str(raw_id))
-        return count
+    @retry(
+        retry=retry_if_exception_type((httpx.HTTPError, httpx.TimeoutException)),
+        stop=stop_after_attempt(settings.max_retry_attempts),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        reraise=True,
+    )
+    async def _fetch_with_retry(self) -> list[dict[str, Any]]:
+        minx, miny, maxx, maxy = settings.east_africa_bbox.split(",")
+        today = utc_now().strftime("%Y-%m-%d")
+        params = {
+            "alertlevel": settings.gdacs_alert_levels,
+            "eventlist": settings.gdacs_event_types,
+            "fromdate": today,
+            "todate": today,
+            "bbox": f"{minx},{miny},{maxx},{maxy}",
+        }
+        async with httpx.AsyncClient(timeout=settings.ingest_timeout_seconds) as client:
+            response = await client.get(GDACS_SEARCH_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+        features = data.get("features", [])
+        logger.info("gdacs.fetch_ok", count=len(features))
+        return features
+
+    def validate(self, raw: RawPayload) -> ValidatedAlert | None:
+        try:
+            props = raw.raw_data.get("properties", {})
+            geom = raw.raw_data.get("geometry")
+            if not geom or not geom.get("coordinates"):
+                logger.warning("gdacs.validate_no_geometry", event_id=raw.source_event_id)
+                return None
+
+            event_type = props.get("eventtype", "")
+            if event_type not in GDACS_HAZARD_MAP:
+                logger.warning("gdacs.validate_unknown_type", event_type=event_type, event_id=raw.source_event_id)
+
+            alert_level = props.get("alertlevel", "Green")
+            iso3 = props.get("iso3") or ""
+            source_url = props.get("url") or props.get("link")
+            if isinstance(source_url, dict):
+                source_url = source_url.get("report") or source_url.get("details") or source_url.get("geometry")
+            if source_url is not None:
+                source_url = str(source_url)
+            return ValidatedAlert(
+                source=self.source,
+                source_event_id=raw.source_event_id,
+                hazard_type=GDACS_HAZARD_MAP.get(event_type, HazardType.OTHER),
+                severity=GDACS_SEVERITY_MAP.get(alert_level, Severity.GREEN),
+                geometry=GeoJSONGeometry(type=geom["type"], coordinates=geom["coordinates"]),
+                valid_from=parse_iso_datetime(props.get("fromdate")),
+                valid_to=parse_iso_datetime(props.get("todate")),
+                affected_countries=[iso3[:2].upper()] if iso3 else [],
+                extra={
+                    "country_name": props.get("countryname", ""),
+                    "event_name": props.get("eventname", ""),
+                    "alert_level": alert_level,
+                    "source_url": source_url,
+                },
+            )
+        except Exception as exc:
+            logger.error("gdacs.validate_error", event_id=raw.source_event_id, error=str(exc))
+            return None
+
+    def transform(self, validated: ValidatedAlert) -> NormalisedAlert:
+        geom_dict = {"type": validated.geometry.type, "coordinates": validated.geometry.coordinates}
+        multipolygon = to_multipolygon_geojson(geom_dict)
+        severity = validated.severity.value
+        return NormalisedAlert(
+            source=self.source,
+            source_event_id=validated.source_event_id,
+            hazard_type=validated.hazard_type,
+            severity=validated.severity,
+            geojson_geometry=multipolygon,
+            affected_countries=validated.affected_countries,
+            valid_from=validated.valid_from or utc_now(),
+            valid_to=validated.valid_to or (utc_now() + timedelta(hours=48)),
+            dedup_hash=NormalisedAlert.build_dedup_hash(self.source.value, validated.source_event_id, severity),
+            raw_payload_id=validated.raw_payload_id,
+            source_url=validated.extra.get("source_url"),
+        )

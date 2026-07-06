@@ -138,9 +138,90 @@ Troubleshooting:
 - If Docker says port `5433` is already in use, change the host side in `docker-compose.yml`, then update `DATABASE_URL` and `MIGRATION_DATABASE_URL` in `.env` to match.
 - If `poetry env use python3.12` fails on macOS, install Python 3.12 with Homebrew or pyenv, then rerun `poetry install`.
 
-## Ingestion and AI
+## Ingestion pipeline
 
-GDACS is enabled by default and ingests the East Africa bounding box. CHIRPS, GFS, GloFAS, and ICPAC adapters are disabled by default and fail clearly if enabled without source-specific endpoint or credential configuration. Claude translation, action-card generation, and report labels run only when `ANTHROPIC_API_KEY` is configured; otherwise reports store empty labels and adapters/tests still pass.
+HALI uses a typed ETL pipeline with five source adapters. Each adapter implements `BaseAdapter` (extract → validate → transform → load) and runs in an isolated APScheduler cron job so one failure never blocks others.
+
+### Sources
+
+| Source | Auth | Schedule | Status | Signal |
+|---|---|---|---|---|
+| GDACS | None — public | 06:00 UTC | ✅ Enabled | Flood, drought, cyclone events |
+| CHIRPS | None — anonymous FTP | 07:00 UTC | ⚫ `ENABLE_CHIRPS=true` | Daily rainfall anomalies |
+| GFS | None — public NOAA | 06:15 UTC | ⚫ `ENABLE_GFS=true` | 24h extreme rainfall forecast |
+| GloFAS | Free CDS key required | 06:30 UTC | ⚫ `ENABLE_GLOFAS=true` | River discharge forecast |
+| ICPAC digilib | None — open data | 07:30 UTC | ⚫ `ENABLE_ICPAC=true` | SPI drought index |
+
+To enable CHIRPS, GFS, and ICPAC (no credentials needed):
+
+```env
+ENABLE_CHIRPS=true
+ENABLE_GFS=true
+ENABLE_ICPAC=true
+```
+
+GloFAS requires a free account at https://cds.climate.copernicus.eu. Set `ENABLE_GLOFAS=true` and `GLOFAS_CDS_API_KEY=your-key`.
+
+### ETL design principles
+
+- **Idempotent**: `dedup_hash` unique constraint — safe to re-run anytime
+- **Dead-letter tracking**: every raw record has `status` (pending → processed | failed)
+- **Source isolation**: one adapter failure never blocks others
+- **Boundary validation**: Pydantic models at the extract→transform edge
+- **Retry with backoff**: `tenacity` on all HTTP/FTP calls
+- **Structured logging**: `structlog` JSON on every pipeline step
+- **Replay**: `raw_ingestion` stores full raw payload for reprocessing
+
+### Trigger ingestion manually
+
+```bash
+# All enabled sources
+curl -X POST http://localhost:8000/api/admin/trigger-ingest
+
+# Single source
+curl -X POST "http://localhost:8000/api/admin/trigger-ingest?source=gdacs"
+
+# Check pipeline status
+curl http://localhost:8000/api/admin/pipeline-status
+```
+
+### Pipeline module structure
+
+```
+apps/backend/src/hali/ingestion/
+├── __init__.py        get_enabled_adapters() factory
+├── base.py            BaseAdapter ABC — shared ETL orchestration
+├── models.py          RawPayload, ValidatedAlert, NormalisedAlert, IngestionResult
+├── loader.py          PostGIS upsert, dead-letter tracking, country spatial join
+├── normaliser.py      Geometry helpers, hazard maps, threshold functions
+├── gdacs.py           GDACS REST adapter (enabled)
+├── chirps.py          CHIRPS FTP adapter (disabled by default)
+├── gfs.py             GFS NOAA adapter (disabled by default)
+├── glofas.py          GloFAS CDS adapter (disabled, needs key)
+└── icpac.py           ICPAC SPI adapter (disabled by default)
+```
+
+### Ingestion environment variables
+
+```env
+# Ingestion source toggles
+ENABLE_SCHEDULER=true
+ENABLE_GDACS=true
+ENABLE_CHIRPS=false
+ENABLE_GFS=false
+ENABLE_GLOFAS=false
+ENABLE_ICPAC=false
+
+# Source credentials (only GloFAS needs one)
+GLOFAS_CDS_API_KEY=
+GLOFAS_CDS_URL=https://cds.climate.copernicus.eu/api
+ICPAC_DIGILIB_BASE=http://digilib.icpac.net
+CHIRPS_FTP_HOST=ftp.chg.ucsb.edu
+```
+
+### AI layer
+
+Claude translation, action-card generation, and report labels run only when `ANTHROPIC_API_KEY` is configured; otherwise reports store empty labels and adapters/tests still pass.
 
 ## USSD
 
@@ -162,11 +243,16 @@ See `infra/railway.md`. Use Railway's `PostGIS` template, not the default plain 
 
 The current Railway database layer is configured in workspace `Ronza`, project `chic-exploration`, service `PostGIS`. Run SQL mirrors or Alembic, set required env vars, and deploy backend with `uvicorn hali.main:app --host 0.0.0.0 --port $PORT`. Build frontend with `VITE_API_URL` pointing to the backend.
 
-## Database Setup Status
+## Layer completion status
 
-The Railway database layer has been provisioned and verified against the `PostGIS` service. Migrations `001_enable_postgis.sql`, `002_create_tables.sql`, and `003_seed_igad_countries.sql` have run successfully. The database contains the six HALI tables, the three expected GiST spatial indexes, eight IGAD country seed rows, and one manual flood test alert used to verify `/api/alerts/geojson`.
-
-Next layer: data ingestion, starting with the GDACS fetcher.
+| Layer | Status | Detail |
+|---|---|---|
+| Database | ✅ Complete | PostgreSQL 16.14 + PostGIS 3.7 on Railway, 6 tables, 3 GiST indexes |
+| Data ingestion | ✅ Complete | 5 adapters, typed ETL, 56 GDACS alerts live in DB, 29 tests passing |
+| Claude AI layer | 🔄 Next | Translations (5 langs), action cards (4 livelihoods), NLP classifier |
+| USSD / SMS | ⏳ Pending | Africa's Talking, Swahili menu tree |
+| Frontend PWA | ⏳ Pending | React, Leaflet map, alert feed, offline cache |
+| Submission | ⏳ Pending | Demo video, Devpost write-up |
 
 ## Known Limitations
 

@@ -42,3 +42,9 @@ class Database:
 
 
 db = Database()
+
+
+def get_pool() -> asyncpg.Pool:
+    if db.pool is None:
+        raise RuntimeError("database pool is not initialized")
+    return db.pool

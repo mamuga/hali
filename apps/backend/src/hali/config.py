@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file="../../.env", extra="ignore")
 
     environment: str = "development"
     log_level: str = "info"
@@ -18,13 +18,27 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-6"
     africastalking_username: str = "sandbox"
     africastalking_api_key: str | None = None
+
     enable_scheduler: bool = True
     enable_gdacs: bool = True
     enable_chirps: bool = False
     enable_gfs: bool = False
     enable_glofas: bool = False
     enable_icpac: bool = False
-    gdacs_url: str = "https://www.gdacs.org/xml/rss.xml"
+
+    gdacs_url: str = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH"
+    glofas_cds_api_key: str = ""
+    glofas_cds_url: str = "https://cds.climate.copernicus.eu/api"
+    icpac_digilib_base: str = "http://digilib.icpac.net"
+    chirps_ftp_host: str = "ftp.chg.ucsb.edu"
+
+    enable_admin_endpoints: bool = True
+    east_africa_bbox: str = "21,-12,52,24"
+    gdacs_alert_levels: str = "Green,Orange,Red"
+    gdacs_event_types: str = "FL,DR,TC,EQ,VO,WF"
+    ingest_timeout_seconds: int = 30
+    max_retry_attempts: int = 3
+
     test_mode: bool = Field(default=False, validation_alias="HALI_TEST_MODE")
 
     @property
@@ -39,3 +53,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+settings = get_settings()

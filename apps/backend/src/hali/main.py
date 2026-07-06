@@ -4,30 +4,29 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from hali.config import get_settings
+from hali.config import settings
 from hali.database import db
-from hali.logging import configure_logging
+from hali.logging_config import configure_logging
 from hali.middleware import RequestIdMiddleware
-from hali.routers import alerts, health, reports, ussd
-from hali.scheduler import build_scheduler
+from hali.routers import admin, alerts, health, reports, ussd
+from hali.scheduler import setup_scheduler
 
-settings = get_settings()
-configure_logging(settings.log_level)
+configure_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    scheduler = None
+    sched = None
     if not settings.test_mode:
         await db.connect(settings.asyncpg_dsn)
         if settings.enable_scheduler:
-            scheduler = build_scheduler(settings, db.pool)
-            scheduler.start()
+            sched = setup_scheduler()
+            sched.start()
     try:
         yield
     finally:
-        if scheduler is not None:
-            scheduler.shutdown(wait=False)
+        if sched is not None:
+            sched.shutdown(wait=False)
         await db.close()
 
 
@@ -45,3 +44,4 @@ app.include_router(health.router)
 app.include_router(alerts.router)
 app.include_router(reports.router)
 app.include_router(ussd.router)
+app.include_router(admin.router)
