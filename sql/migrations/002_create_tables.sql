@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS raw_ingestion (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  source TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
   external_id TEXT,
   payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'failed')),
@@ -15,11 +15,11 @@ CREATE TABLE IF NOT EXISTS alerts (
   hazard_type TEXT NOT NULL CHECK (hazard_type IN ('flood', 'drought', 'locust', 'cyclone', 'health', 'other')),
   severity TEXT NOT NULL CHECK (severity IN ('green', 'orange', 'red')),
   affected_countries TEXT[] NOT NULL DEFAULT '{}',
-  geometry geometry(MultiPolygon, 4326) NOT NULL,
+  geom geometry(MultiPolygon, 4326) NOT NULL,
   valid_from TIMESTAMPTZ,
   valid_to TIMESTAMPTZ,
   dedup_hash TEXT NOT NULL UNIQUE,
-  source TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
   source_url TEXT,
   processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -58,14 +58,14 @@ CREATE TABLE IF NOT EXISTS community_reports (
 
 CREATE TABLE IF NOT EXISTS countries (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  iso3 CHAR(3) NOT NULL UNIQUE,
+  iso2 CHAR(2) NOT NULL UNIQUE,
   name TEXT NOT NULL UNIQUE,
-  geometry geometry(MultiPolygon, 4326) NOT NULL
+  geom geometry(MultiPolygon, 4326) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_alerts_geometry ON alerts USING GIST (geometry);
+CREATE INDEX IF NOT EXISTS alerts_geom_idx ON alerts USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_alerts_valid_to ON alerts (valid_to);
 CREATE INDEX IF NOT EXISTS idx_alerts_hazard_severity ON alerts (hazard_type, severity);
-CREATE INDEX IF NOT EXISTS idx_reports_location ON community_reports USING GIST (location);
+CREATE INDEX IF NOT EXISTS community_reports_geom_idx ON community_reports USING GIST (location);
 CREATE INDEX IF NOT EXISTS idx_reports_reported_at ON community_reports (reported_at);
-CREATE INDEX IF NOT EXISTS idx_countries_geometry ON countries USING GIST (geometry);
+CREATE INDEX IF NOT EXISTS countries_geom_idx ON countries USING GIST (geom);

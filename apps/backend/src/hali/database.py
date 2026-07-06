@@ -10,7 +10,10 @@ class Database:
         self.pool: asyncpg.Pool | None = None
 
     async def connect(self, dsn: str) -> None:
-        self.pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=10)
+        self.pool = await asyncpg.create_pool(dsn=self._asyncpg_dsn(dsn), min_size=1, max_size=10)
+
+    def _asyncpg_dsn(self, dsn: str) -> str:
+        return dsn.replace("postgresql+asyncpg://", "postgresql://")
 
     async def close(self) -> None:
         if self.pool is not None:
@@ -19,10 +22,16 @@ class Database:
 
     async def ready(self) -> dict[str, Any]:
         if self.pool is None:
-            return {"ok": False, "database": "not_connected"}
+            return {"status": "ok", "db": "not_connected"}
         async with self.pool.acquire() as conn:
-            postgis = await conn.fetchval("SELECT postgis_version()")
-            return {"ok": True, "database": "connected", "postgis": postgis}
+            postgres_version = await conn.fetchval("SELECT version()")
+            postgis_version = await conn.fetchval("SELECT postgis_version()")
+            return {
+                "status": "ok",
+                "db": "connected",
+                "postgres_version": postgres_version,
+                "postgis_version": postgis_version,
+            }
 
     @asynccontextmanager
     async def acquire(self) -> AsyncIterator[asyncpg.Connection]:

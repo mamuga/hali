@@ -19,4 +19,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM countries WHERE iso3 IN ('KEN','ETH','SOM','UGA','DJI','ERI','SDN','SSD')")
+    op.execute("DELETE FROM countries WHERE iso2 IN ('KE','ET','SO','UG','DJ','ER','SD','SS')")

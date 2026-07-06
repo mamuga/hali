@@ -6,8 +6,10 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict:
+    if db.pool is None:
+        return {"status": "ok"}
+    return await db.ready()
 
 
 @router.get("/ready")

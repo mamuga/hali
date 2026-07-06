@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     frontend_url: str = "http://localhost:5173"
     cors_origins: str = "http://localhost:5173"
-    database_url: str = "postgresql+asyncpg://hali:hali@localhost:5432/hali"
-    migration_database_url: str = "postgresql://hali:hali@localhost:5432/hali"
+    database_url: str = "postgresql+asyncpg://hali:hali@localhost:5433/hali"
+    migration_database_url: str = "postgresql://hali:hali@localhost:5433/hali"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
     africastalking_username: str = "sandbox"

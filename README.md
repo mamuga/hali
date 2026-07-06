@@ -83,6 +83,8 @@ Create your local environment file:
 cp .env.example .env
 ```
 
+For local Docker, the default database URLs in `.env.example` work as-is. For Railway, replace the three database URLs with the public TCP proxy URL from the Railway `PostGIS` service variables. Keep `DATABASE_URL` on the `postgresql+asyncpg://` scheme and use raw `postgresql://` for `DATABASE_URL_RAW` and `MIGRATION_DATABASE_URL`.
+
 Start PostGIS:
 
 ```bash
@@ -94,6 +96,7 @@ The checked-in compose file maps PostGIS to host port `5433` to avoid collisions
 
 ```env
 DATABASE_URL=postgresql+asyncpg://hali:hali@localhost:5433/hali
+DATABASE_URL_RAW=postgresql://hali:hali@localhost:5433/hali
 MIGRATION_DATABASE_URL=postgresql://hali:hali@localhost:5433/hali
 ```
 
@@ -121,6 +124,8 @@ curl http://localhost:8000/ready
 curl http://localhost:8000/api/alerts
 ```
 
+When the backend is connected to PostGIS, `/health` returns `status`, `db`, `postgres_version`, and `postgis_version`. In test mode or before the database pool is initialized, it remains a shallow liveness response with `{"status":"ok"}`.
+
 Run verification checks:
 
 ```bash
@@ -143,11 +148,25 @@ Configure Africa's Talking to POST to `/ussd`. The flow uses `CON` for continuin
 
 ## Data Boundaries
 
-`sql/migrations/003_seed_igad_countries.sql` uses bounding-box polygons for Kenya, Ethiopia, Somalia, Uganda, Djibouti, Eritrea, Sudan, and South Sudan. Replace them with Natural Earth boundaries using `ogr2ogr` as documented in that migration.
+`sql/migrations/003_seed_igad_countries.sql` uses bounding-box polygons for Kenya, Ethiopia, Somalia, Uganda, Djibouti, Eritrea, Sudan, and South Sudan. Countries are keyed by ISO2 codes: `KE`, `ET`, `SO`, `UG`, `DJ`, `ER`, `SD`, and `SS`. Replace the bounding boxes with Natural Earth boundaries using `ogr2ogr` as documented in that migration.
+
+## Database Contract
+
+The SQL mirrors in `sql/migrations` are the Railway bootstrap contract. `alerts.geom`, `community_reports.location`, and `countries.geom` are PostGIS geometry columns in EPSG:4326. Spatial indexes are named `alerts_geom_idx`, `community_reports_geom_idx`, and `countries_geom_idx`.
+
+`DATABASE_URL` uses the `postgresql+asyncpg://` prefix for application configuration. `DATABASE_URL_RAW` and `MIGRATION_DATABASE_URL` use the raw `postgresql://` prefix for `psql`, Alembic, and other CLI tools.
 
 ## Railway
 
-See `infra/railway.md`. Use Railway Postgres with PostGIS, run SQL mirrors or Alembic, set required env vars, and deploy backend with `uvicorn hali.main:app --host 0.0.0.0 --port $PORT`. Build frontend with `VITE_API_URL` pointing to the backend.
+See `infra/railway.md`. Use Railway's `PostGIS` template, not the default plain `Postgres` template. Railway's default PostgreSQL image does not include the PostGIS system extension files, so `CREATE EXTENSION postgis` fails there.
+
+The current Railway database layer is configured in workspace `Ronza`, project `chic-exploration`, service `PostGIS`. Run SQL mirrors or Alembic, set required env vars, and deploy backend with `uvicorn hali.main:app --host 0.0.0.0 --port $PORT`. Build frontend with `VITE_API_URL` pointing to the backend.
+
+## Database Setup Status
+
+The Railway database layer has been provisioned and verified against the `PostGIS` service. Migrations `001_enable_postgis.sql`, `002_create_tables.sql`, and `003_seed_igad_countries.sql` have run successfully. The database contains the six HALI tables, the three expected GiST spatial indexes, eight IGAD country seed rows, and one manual flood test alert used to verify `/api/alerts/geojson`.
+
+Next layer: data ingestion, starting with the GDACS fetcher.
 
 ## Known Limitations
 

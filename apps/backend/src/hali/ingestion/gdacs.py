@@ -12,6 +12,7 @@ from hali.ingestion.normaliser import dedup_hash, hazard, severity
 
 log = structlog.get_logger()
 EAST_AFRICA_BBOX_POLYGON = {"type":"MultiPolygon","coordinates":[[[[21,-12],[52,-12],[52,24],[21,24],[21,-12]]]]}
+IGAD_COUNTRY_CODES = ["KE", "ET", "SO", "UG", "DJ", "ER", "SD", "SS"]
 
 
 class GdacsAdapter:
@@ -37,7 +38,7 @@ class GdacsAdapter:
             category = item.findtext("category") or title
             pub_date = datetime.now(UTC).isoformat()
             payload = {"title": title, "link": link, "category": category}
-            alerts.append(NormalizedAlert(self.source, link or title, hazard(category), severity(title), ["Kenya","Ethiopia","Somalia","Uganda","Djibouti","Eritrea","Sudan","South Sudan"], EAST_AFRICA_BBOX_POLYGON, pub_date, (datetime.now(UTC)+timedelta(days=7)).isoformat(), payload))
+            alerts.append(NormalizedAlert(self.source, link or title, hazard(category), severity(title), IGAD_COUNTRY_CODES, EAST_AFRICA_BBOX_POLYGON, pub_date, (datetime.now(UTC)+timedelta(days=7)).isoformat(), payload))
         return alerts
 
     async def ingest(self, pool: asyncpg.Pool) -> int:
@@ -49,7 +50,7 @@ class GdacsAdapter:
                 try:
                     await conn.execute(
                         """
-                        INSERT INTO alerts (raw_ingestion_id, hazard_type, severity, affected_countries, geometry, valid_from, valid_to, dedup_hash, source, source_url)
+                        INSERT INTO alerts (raw_ingestion_id, hazard_type, severity, affected_countries, geom, valid_from, valid_to, dedup_hash, source, source_url)
                         VALUES ($1,$2,$3,$4,ST_Multi(ST_GeomFromGeoJSON($5)), $6::timestamptz, $7::timestamptz, $8, $9, $10)
                         ON CONFLICT (dedup_hash) DO NOTHING
                         """,

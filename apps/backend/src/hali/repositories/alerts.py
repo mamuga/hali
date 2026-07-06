@@ -20,7 +20,7 @@ class AlertRepository:
         LEFT JOIN alert_translations t ON t.alert_id = a.id AND t.language = $1
         LEFT JOIN alert_translations en ON en.alert_id = a.id AND en.language = 'en'
         WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
-          AND ($2::float8 IS NULL OR $3::float8 IS NULL OR ST_Contains(a.geometry, ST_SetSRID(ST_MakePoint($3, $2), 4326)))
+          AND ($2::float8 IS NULL OR $3::float8 IS NULL OR ST_Contains(a.geom, ST_SetSRID(ST_MakePoint($3, $2), 4326)))
         ORDER BY a.severity DESC, a.processed_at DESC
         LIMIT $4
         """
@@ -34,7 +34,7 @@ class AlertRepository:
           'type', 'FeatureCollection',
           'features', COALESCE(jsonb_agg(jsonb_build_object(
             'type', 'Feature',
-            'geometry', ST_AsGeoJSON(a.geometry)::jsonb,
+            'geometry', ST_AsGeoJSON(a.geom)::jsonb,
             'properties', jsonb_build_object(
               'id', a.id::text,
               'hazard_type', a.hazard_type,
@@ -50,7 +50,7 @@ class AlertRepository:
         FROM alerts a
         LEFT JOIN alert_translations t ON t.alert_id = a.id AND t.language = $5
         LEFT JOIN alert_translations en ON en.alert_id = a.id AND en.language = 'en'
-        WHERE ST_Intersects(a.geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+        WHERE ST_Intersects(a.geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
           AND ($6::text IS NULL OR a.severity = $6)
           AND ($7::text IS NULL OR a.hazard_type = $7)
         """
