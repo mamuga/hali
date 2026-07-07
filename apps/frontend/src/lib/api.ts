@@ -1,30 +1,71 @@
 import axios from 'axios';
-import type { ActionCard, Alert, AlertGeoJSON, CommunityHeatmapFeatureCollection, CommunityReport, CommunityReportResponse, Language, Livelihood } from './types';
+import type {
+  ActionCard,
+  Alert,
+  AlertGeoJSON,
+  CommunityHeatmapFeatureCollection,
+  CommunityReport,
+  CommunityReportResponse,
+  Language,
+  Livelihood,
+} from '@hali/types';
+import { env } from './env';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const client = axios.create({ baseURL: API_URL, timeout: 12000 });
+export const api = axios.create({
+  baseURL: env.apiUrl,
+  timeout: 15_000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
-export async function fetchAlerts(lang: Language = 'en'): Promise<Alert[]> {
-  const { data } = await client.get<Alert[]>('/api/alerts', { params: { lang } });
+export async function fetchAlerts(
+  lang: Language = 'sw',
+  lat?: number,
+  lng?: number,
+  limit = 20,
+): Promise<Alert[]> {
+  const params: Record<string, string | number> = { lang, limit };
+  if (lat != null) params.lat = lat;
+  if (lng != null) params.lng = lng;
+  const { data } = await api.get<Alert[]>('/api/alerts', { params });
   return data;
 }
 
-export async function fetchAlertsGeoJSON(lang: Language = 'sw'): Promise<AlertGeoJSON> {
-  const { data } = await client.get<AlertGeoJSON>('/api/alerts/geojson', { params: { lang } });
+export async function fetchAlertsGeoJSON(
+  lang: Language = 'sw',
+  bbox = '21,-12,52,24',
+  severity?: string,
+  hazard?: string,
+): Promise<AlertGeoJSON> {
+  const params: Record<string, string> = { lang, bbox };
+  if (severity) params.severity = severity;
+  if (hazard) params.hazard = hazard;
+  const { data } = await api.get<AlertGeoJSON>('/api/alerts/geojson', { params });
   return data;
 }
 
-export async function fetchActionCard(alertId: string, livelihood: Livelihood, lang: Language): Promise<ActionCard> {
-  const { data } = await client.get<ActionCard>(`/api/alerts/${alertId}/action-card`, { params: { livelihood, lang } });
-  return data;
+export async function fetchActionCard(
+  alertId: string,
+  livelihood: Livelihood,
+  lang: Language = 'en',
+): Promise<ActionCard | null> {
+  try {
+    const { data } = await api.get<ActionCard>(`/api/alerts/${alertId}/action-card`, {
+      params: { livelihood, lang },
+    });
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export async function submitReport(report: CommunityReport): Promise<CommunityReportResponse> {
-  const { data } = await client.post<CommunityReportResponse>('/api/reports', report);
+  const { data } = await api.post<CommunityReportResponse>('/api/reports', report);
   return data;
 }
 
 export async function fetchHeatmap(days = 7): Promise<CommunityHeatmapFeatureCollection> {
-  const { data } = await client.get<CommunityHeatmapFeatureCollection>('/api/reports/heatmap', { params: { days } });
+  const { data } = await api.get<CommunityHeatmapFeatureCollection>('/api/reports/heatmap', {
+    params: { days },
+  });
   return data;
 }

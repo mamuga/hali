@@ -1,14 +1,34 @@
-import { useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+export interface Coords {
+  lat: number;
+  lng: number;
+}
 
 export function useLocation() {
-  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<Coords | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const locate = useCallback(() => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation not available');
+      setLoading(false);
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
-      (pos) => setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setError('Location unavailable'),
-      { enableHighAccuracy: true, timeout: 10000 },
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLoading(false);
+      },
+      () => {
+        setError('Location access denied');
+        setLoading(false);
+      },
+      { timeout: 8000, maximumAge: 60000 },
     );
   }, []);
-  return { position, error, locate };
+
+  return { coords, error, loading };
 }

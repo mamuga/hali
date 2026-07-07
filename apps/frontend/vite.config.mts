@@ -1,31 +1,110 @@
-/// <reference types='vitest' />
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(() => ({
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default defineConfig({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/frontend',
-  server: { port: 5173, host: '0.0.0.0' },
-  preview: { port: 4173, host: '0.0.0.0' },
+
   plugins: [
     react(),
-    nxViteTsPaths(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico'],
-      manifest: { name: 'HALI - Early Warning', short_name: 'HALI', theme_color: '#0F6E56', background_color: '#F6F8F5', display: 'standalone', start_url: '/', icons: [{ src: '/favicon.ico', sizes: '64x64 32x32 24x24 16x16', type: 'image/x-icon' }] },
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      manifest: {
+        name: 'HALI - Early Warning',
+        short_name: 'HALI',
+        description: 'Hyper-local early warning for East Africa',
+        theme_color: '#0ea5e9',
+        background_color: '#f8fafc',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+      },
       workbox: {
-        navigateFallback: '/offline',
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
-          { urlPattern: ({ url }) => url.pathname.startsWith('/api/alerts'), handler: 'StaleWhileRevalidate', options: { cacheName: 'hali-alerts', expiration: { maxAgeSeconds: 300, maxEntries: 60 } } },
-          { urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*$/i, handler: 'CacheFirst', options: { cacheName: 'osm-tiles', expiration: { maxAgeSeconds: 60 * 60 * 24 * 7, maxEntries: 500 } } },
-          { urlPattern: ({ url }) => url.pathname.includes('/action-card'), handler: 'StaleWhileRevalidate', options: { cacheName: 'hali-action-cards', expiration: { maxAgeSeconds: 60 * 60 * 24, maxEntries: 100 } } },
+          {
+            urlPattern: /\/api\/alerts(\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hali-alerts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 300 },
+            },
+          },
+          {
+            urlPattern: /\/api\/alerts\/geojson/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hali-geojson',
+              expiration: { maxEntries: 10, maxAgeSeconds: 300 },
+            },
+          },
+          {
+            urlPattern: /\/api\/alerts\/.+\/action-card/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'hali-action-cards',
+              expiration: { maxEntries: 100, maxAgeSeconds: 86400 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/[a-c]\.tile\.openstreetmap\.org\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-tiles',
+              expiration: { maxEntries: 1000, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),
   ],
-  build: { outDir: '../../dist/apps/frontend', emptyOutDir: true, reportCompressedSize: true, commonjsOptions: { transformMixedEsModules: true } },
-  test: { watch: false, globals: true, environment: 'jsdom', include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'], reporters: ['default'], coverage: { reportsDirectory: '../../coverage/apps/frontend', provider: 'v8' } },
-}));
+
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@hali/types': path.resolve(__dirname, '../../packages/types/src/index.ts'),
+    },
+  },
+
+  server: { port: 5173, host: '0.0.0.0' },
+  preview: { port: 4173, host: '0.0.0.0' },
+
+  build: {
+    outDir: '../../dist/frontend',
+    emptyOutDir: true,
+    reportCompressedSize: true,
+    commonjsOptions: { transformMixedEsModules: true },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) return 'leaflet';
+          if (id.includes('node_modules/react-router-dom') || id.includes('node_modules/react-router')) return 'router';
+          if (id.includes('node_modules/@radix-ui')) return 'shadcn';
+          if (id.includes('node_modules/react') || id.includes('node_modules/sonner')) return 'vendor';
+        },
+      },
+    },
+  },
+
+  test: {
+    watch: false,
+    globals: true,
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    reporters: ['default'],
+    coverage: { reportsDirectory: '../../coverage/apps/frontend', provider: 'v8' },
+  },
+});

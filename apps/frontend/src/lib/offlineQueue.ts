@@ -1,37 +1,47 @@
-import type { CommunityReport } from './types';
-import { submitReport } from './api';
+import type { CommunityReport } from '@hali/types';
 
-const KEY = 'hali:queued-reports';
-export type QueuedReport = CommunityReport & { queuedAt: string; id: string };
+const QUEUE_KEY = 'hali:report_queue';
 
-export function listQueuedReports(): QueuedReport[] {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || '[]') as QueuedReport[];
-  } catch {
-    return [];
-  }
+export interface QueuedReport {
+  id: string;
+  report: CommunityReport;
+  queuedAt: string;
+  attempts: number;
 }
 
-function save(items: QueuedReport[]) {
-  localStorage.setItem(KEY, JSON.stringify(items));
-}
-
-export function addQueuedReport(report: CommunityReport): QueuedReport {
-  const item = { ...report, id: crypto.randomUUID(), queuedAt: new Date().toISOString() };
-  save([...listQueuedReports(), item]);
-  return item;
-}
-
-export function removeQueuedReport(id: string) {
-  save(listQueuedReports().filter((item) => item.id !== id));
-}
-
-export async function flushQueuedReports(): Promise<number> {
-  let sent = 0;
-  for (const item of listQueuedReports()) {
-    await submitReport({ lat: item.lat, lng: item.lng, hazard_type: item.hazard_type, description: item.description });
-    removeQueuedReport(item.id);
-    sent += 1;
-  }
-  return sent;
-}
+export const offlineQueue = {
+  get(): QueuedReport[] {
+    try {
+      return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') as QueuedReport[];
+    } catch {
+      return [];
+    }
+  },
+  add(report: CommunityReport): void {
+    const q = this.get();
+    q.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      report,
+      queuedAt: new Date().toISOString(),
+      attempts: 0,
+    });
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+  },
+  remove(id: string): void {
+    localStorage.setItem(
+      QUEUE_KEY,
+      JSON.stringify(this.get().filter((q) => q.id !== id)),
+    );
+  },
+  incrementAttempts(id: string): void {
+    localStorage.setItem(
+      QUEUE_KEY,
+      JSON.stringify(
+        this.get().map((q) => (q.id === id ? { ...q, attempts: q.attempts + 1 } : q)),
+      ),
+    );
+  },
+  count(): number {
+    return this.get().length;
+  },
+};

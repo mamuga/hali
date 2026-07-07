@@ -1,30 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchAlerts } from '../lib/api';
-import type { Alert, Language } from '../lib/types';
+import type { Alert, Language } from '@hali/types';
 
-export function useAlerts(lang: Language) {
+export function useAlerts(lang: Language = 'sw') {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      try {
-        setError(null);
-        const data = await fetchAlerts(lang);
-        if (active) setAlerts(data);
-      } catch {
-        if (active) setError('Unable to refresh alerts');
-      } finally {
-        if (active) setLoading(false);
-      }
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setAlerts(await fetchAlerts(lang));
+    } catch {
+      setError('Could not load alerts.');
+    } finally {
+      setLoading(false);
     }
-    load();
-    const id = window.setInterval(load, 60000);
-    return () => {
-      active = false;
-      window.clearInterval(id);
-    };
   }, [lang]);
-  return { alerts, loading, error };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  return { alerts, loading, error, reload: load };
 }

@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
-import { HaliMap } from '../components/HaliMap';
-import { fetchAlertsGeoJSON, fetchHeatmap } from '../lib/api';
-import type { AlertGeoJSON, CommunityHeatmapFeatureCollection } from '../lib/types';
-
-const emptyAlerts: AlertGeoJSON = { type: 'FeatureCollection', features: [] };
-const emptyHeatmap: CommunityHeatmapFeatureCollection = { type: 'FeatureCollection', features: [] };
+import { useState } from 'react';
+import { HaliMap } from '@/components/HaliMap';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import type { Language } from '@hali/types';
 
 export function MapView() {
-  const [alerts, setAlerts] = useState(emptyAlerts);
-  const [heatmap, setHeatmap] = useState(emptyHeatmap);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => { Promise.all([fetchAlertsGeoJSON(), fetchHeatmap()]).then(([a, h]) => { setAlerts(a); setHeatmap(h); }).finally(() => setLoading(false)); }, []);
-  return <main className="page page-map"><header className="page-header"><h1>Alert Map</h1></header><HaliMap alerts={alerts} heatmap={heatmap} loading={loading} /></main>;
+  const [lang, setLang] = useState<Language>('sw');
+  return (
+    <div className="relative h-full">
+      <div className="absolute left-3 top-3 z-[1000]">
+        <LanguageSelector value={lang} onChange={setLang} />
+      </div>
+      <HaliMap lang={lang} />
+    </div>
+  );
 }
