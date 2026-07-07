@@ -83,7 +83,7 @@ export default defineConfig({
   preview: { port: 4173, host: '0.0.0.0' },
 
   build: {
-    outDir: '../../dist/frontend',
+    outDir: '../../dist/apps/frontend',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: { transformMixedEsModules: true },
