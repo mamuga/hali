@@ -6,8 +6,14 @@ from hali.ingestion.icpac import IcpacAdapter
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("adapter_cls", [ChirpsAdapter, GfsAdapter, IcpacAdapter])
-async def test_disabled_adapters_extract_empty(adapter_cls) -> None:
+@pytest.mark.parametrize(
+    ("adapter_cls", "enable_flag"),
+    [(ChirpsAdapter, "enable_chirps"), (GfsAdapter, "enable_gfs"), (IcpacAdapter, "enable_icpac")],
+)
+async def test_disabled_adapters_extract_empty(adapter_cls, enable_flag, monkeypatch) -> None:
+    from hali.config import settings
+
+    monkeypatch.setattr(settings, enable_flag, False)
     adapter = adapter_cls(None)
     assert await adapter.extract() == []
 

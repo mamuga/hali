@@ -5,7 +5,9 @@ import ftplib
 import gzip
 import io
 import os
+import re
 import tempfile
+from datetime import date as date_cls
 from datetime import timedelta
 
 import structlog
@@ -17,7 +19,8 @@ from .models import GeoJSONGeometry, HazardType, NormalisedAlert, RawPayload, Se
 from .normaliser import bbox_to_multipolygon_geojson, raster_threshold_to_geojson, utc_now
 
 logger = structlog.get_logger(__name__)
-CHIRPS_FTP_PATH = "/pub/org/chg/products/CHIRPS-2.0/africa_daily/tifs/p05"
+CHIRPS_FTP_PATH = "/pub/org/chc/products/CHIRPS-2.0/africa_daily/tifs/p05"
+CHIRPS_FILENAME_RE = re.compile(r"chirps-v2\.0\.(\d{4})\.(\d{2})\.(\d{2})\.tif\.gz")
 FLOOD_THRESHOLD_MM = 50.0
 DROUGHT_THRESHOLD_MM = 2.0
 
@@ -29,40 +32,71 @@ class ChirpsAdapter(BaseAdapter):
         if not settings.enable_chirps:
             return []
         try:
-            yesterday = utc_now().date() - timedelta(days=1)
-            file_path = await self._download_tif(yesterday)
-            if not file_path:
+            result = await self._download_latest()
+            if not result:
                 return []
-            return [RawPayload(source=self.source, raw_data={"local_tif_path": file_path, "date": str(yesterday)}, source_event_id=f"chirps-{yesterday}")]
+            file_path, found_date = result
+            return [
+                RawPayload(
+                    source=self.source,
+                    raw_data={"local_tif_path": file_path, "date": str(found_date)},
+                    source_event_id=f"chirps-{found_date}",
+                )
+            ]
         except Exception as exc:
             logger.error("chirps.extract_failed", error=str(exc))
             return []
 
-    async def _download_tif(self, date: object) -> str | None:
+    async def _download_latest(self) -> tuple[str, date_cls] | None:
+        """CHIRPS provisional daily data lags real time by several weeks, so
+        find the newest file actually published rather than assuming T-1
+        exists.
+        """
         import asyncio
 
-        def _ftp_download() -> str | None:
-            filename = f"chirps-v2.0.{date.year}.{date.month:02d}.{date.day:02d}.tif.gz"
-            remote_path = f"{CHIRPS_FTP_PATH}/{date.year}/{filename}"
-            try:
-                ftp = ftplib.FTP(settings.chirps_ftp_host, timeout=60)
-                ftp.login()
-                buffer = io.BytesIO()
-                ftp.retrbinary(f"RETR {remote_path}", buffer.write)
+        return await asyncio.get_running_loop().run_in_executor(None, self._ftp_download_latest)
+
+    def _ftp_download_latest(self) -> tuple[str, date_cls] | None:
+        cutoff = utc_now().date() - timedelta(days=1)
+        try:
+            ftp = ftplib.FTP(settings.chirps_ftp_host, timeout=60)
+            ftp.login()
+
+            candidates: list[tuple[date_cls, str]] = []
+            for year in {cutoff.year, cutoff.year - 1}:
+                try:
+                    names = ftp.nlst(f"{CHIRPS_FTP_PATH}/{year}")
+                except ftplib.error_perm:
+                    continue
+                for name in names:
+                    match = CHIRPS_FILENAME_RE.search(name)
+                    if not match:
+                        continue
+                    found = date_cls(int(match[1]), int(match[2]), int(match[3]))
+                    if found <= cutoff:
+                        candidates.append((found, name))
+
+            if not candidates:
                 ftp.quit()
-                buffer.seek(0)
-                with gzip.open(buffer) as gz:
-                    data = gz.read()
-                tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-                tmp.write(data)
-                tmp.flush()
-                tmp.close()
-                return tmp.name
-            except Exception as exc:
-                logger.warning("chirps.ftp_failed", error=str(exc))
+                logger.warning("chirps.no_files_available", cutoff=str(cutoff))
                 return None
 
-        return await asyncio.get_running_loop().run_in_executor(None, _ftp_download)
+            latest_date, latest_name = max(candidates, key=lambda c: c[0])
+            buffer = io.BytesIO()
+            ftp.retrbinary(f"RETR {CHIRPS_FTP_PATH}/{latest_date.year}/{os.path.basename(latest_name)}", buffer.write)
+            ftp.quit()
+
+            buffer.seek(0)
+            with gzip.open(buffer) as gz:
+                data = gz.read()
+            tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+            tmp.write(data)
+            tmp.flush()
+            tmp.close()
+            return tmp.name, latest_date
+        except Exception as exc:
+            logger.warning("chirps.ftp_failed", error=str(exc))
+            return None
 
     def validate(self, raw: RawPayload) -> ValidatedAlert | None:
         tif_path = raw.raw_data.get("local_tif_path")

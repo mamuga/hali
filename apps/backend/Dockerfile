@@ -4,9 +4,11 @@ FROM python:3.13-slim AS builder
 WORKDIR /build
 
 # System deps required to compile rasterio, asyncpg, shapely, psycopg C extensions
+# libeccodes-dev is required by cfgrib/eccodes to parse GloFAS GRIB2 forecasts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ \
     libgdal-dev libgeos-dev libproj-dev \
+    libeccodes-dev \
     libpq-dev \
     curl \
   && rm -rf /var/lib/apt/lists/*
@@ -29,10 +31,12 @@ FROM python:3.13-slim AS runtime
 WORKDIR /app
 
 # Runtime shared libraries needed by rasterio, asyncpg, psycopg
+# libeccodes0 is required by cfgrib/eccodes to parse GloFAS GRIB2 forecasts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdal-dev \
     libgeos-c1v5 \
     libproj-dev \
+    libeccodes0 \
     libpq5 \
     curl \
   && rm -rf /var/lib/apt/lists/*

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     glofas_cds_api_key: str = ""
     glofas_cds_url: str = "https://cds.climate.copernicus.eu/api"
     icpac_digilib_base: str = "http://digilib.icpac.net"
-    chirps_ftp_host: str = "ftp.chg.ucsb.edu"
+    chirps_ftp_host: str = "ftp.chc.ucsb.edu"
 
     enable_admin_endpoints: bool = True
 
