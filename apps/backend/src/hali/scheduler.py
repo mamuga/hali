@@ -64,8 +64,13 @@ def setup_scheduler() -> AsyncIOScheduler:
         if enabled and job_id not in existing_ids:
             scheduler.add_job(_run_source, CronTrigger(hour=hour, minute=minute), args=[name], id=job_id, replace_existing=True)
 
+    # Runs after every ingestion job above so newly inserted alerts get real
+    # translations the same day, instead of only once at process startup.
+    if settings.ai_enabled and "ai-backlog-daily" not in existing_ids:
+        scheduler.add_job(_run_ai_backlog, CronTrigger(hour=8, minute=0), id="ai-backlog-daily", replace_existing=True)
+
     enabled_sources = [name for _, name, enabled, _, _ in jobs if enabled]
-    logger.info("scheduler.configured", enabled_sources=enabled_sources)
+    logger.info("scheduler.configured", enabled_sources=enabled_sources, ai_backlog_scheduled=settings.ai_enabled)
     return scheduler
 
 
@@ -86,3 +91,13 @@ async def _run_source(name: str) -> None:
             )
     except Exception as exc:
         logger.error("scheduler.job_failed", source=name, error=str(exc))
+
+
+async def _run_ai_backlog() -> None:
+    try:
+        from hali.ai.processor import process_backlog
+
+        result = await process_backlog(get_pool())
+        logger.info("scheduler.ai_backlog_job_ok", **result)
+    except Exception as exc:
+        logger.error("scheduler.ai_backlog_job_failed", error=str(exc))
