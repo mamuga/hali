@@ -1,78 +1,426 @@
+"""
+HALI AI Processor - orchestrates the full AI pipeline per alert.
+
+For each alert:
+  1. Enrich context (season, dominant livelihood)
+  2. Run ensemble translation into all supported languages
+  3. Generate livelihood-specific action cards
+  4. Assess severity upgrade signals from community ground-truth reports
+  5. Classify community reports (background, per-report)
+
+Alerts are considered "AI-processed" once they have a translation stored
+(there is no dedicated processed-by-AI column on `alerts`), so the backlog
+scan looks for alerts missing a translation row rather than a status flag.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import time
 from uuid import UUID
 
 import asyncpg
 import structlog
 
-from hali.ai.claude import LANGUAGES, LIVELIHOODS, ClaudeService
-from hali.config import get_settings
+from hali.config import settings
 
-log = structlog.get_logger()
+from .context import get_dominant_livelihood, get_season
+from .models import (
+    ActionCard,
+    AlertUpgradeSignal,
+    ModelProvider,
+    ProcessingResult,
+    TranslationOutput,
+)
+from .prompts import (
+    action_card_system_prompt,
+    action_card_user_prompt,
+    report_label_system_prompt,
+    report_label_user_prompt,
+    severity_assessment_system_prompt,
+    severity_assessment_user_prompt,
+    translation_system_prompt,
+    translation_user_prompt,
+)
+from .router import AIRouter
+
+logger = structlog.get_logger(__name__)
+
+LANGUAGES = ["sw", "so", "am", "om", "ar", "en"]
+LIVELIHOODS = ["farmer", "pastoralist", "fisherfolk", "urban"]
+
+SEVERITY_RANK = {"green": 0, "orange": 1, "red": 2}
 
 
-async def translate_alert(alert_id: UUID, hazard_type: str, severity: str, affected_countries: list[str], pool: asyncpg.Pool) -> None:
-    claude = ClaudeService(get_settings())
-    fallback = {
-        lang: {"headline": f"{severity.title()} {hazard_type} alert", "body": f"{hazard_type.title()} alert affecting {', '.join(affected_countries) or 'East Africa'}. Follow local guidance."}
-        for lang in LANGUAGES
-    }
-    data = await claude.json_prompt(
-        "Return JSON keyed by sw, so, am, om, ar, en. Each value has headline max 20 words and body max 80 words at Grade 5 reading level. "
-        f"Do not invent details. Hazard={hazard_type}, severity={severity}, countries={affected_countries}."
-    ) or fallback
-    async with pool.acquire() as conn:
-        for lang in LANGUAGES:
-            item = data.get(lang, fallback[lang])
+def _parse_json_block(raw: str) -> dict:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text.strip())
+
+
+class AlertProcessor:
+    """Processes one alert at a time through the full AI pipeline.
+
+    Reuse one instance per pool - the AIRouter manages client connections.
+    """
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self.pool = pool
+        self.router = AIRouter()
+
+    async def process_alert(self, alert_id: UUID) -> ProcessingResult:
+        """Full pipeline for one alert. Never raises - errors are captured
+        in result.errors.
+        """
+        start = time.perf_counter()
+        result = ProcessingResult(alert_id=alert_id)
+        log = logger.bind(alert_id=str(alert_id))
+        log.info("processor.start")
+
+        try:
+            alert = await self._fetch_alert(alert_id)
+            if not alert:
+                result.errors.append(f"Alert {alert_id} not found")
+                return result
+        except Exception as exc:
+            result.errors.append(f"DB fetch failed: {exc}")
+            return result
+
+        season = get_season(alert.get("valid_from"))
+        countries = list(alert.get("affected_countries") or [])
+        dominant_livelihood = get_dominant_livelihood(countries)
+        log.info("processor.context", season=season, dominant_livelihood=dominant_livelihood)
+
+        valid_from_str = alert["valid_from"].strftime("%Y-%m-%d %H:%M UTC") if alert.get("valid_from") else "now"
+        valid_to_str = alert["valid_to"].strftime("%Y-%m-%d %H:%M UTC") if alert.get("valid_to") else "72 hours from now"
+
+        # Step 1: ensemble translations, all languages in parallel.
+        translations = await asyncio.gather(
+            *[
+                self._translate_one(
+                    alert_id=alert_id,
+                    hazard_type=alert["hazard_type"],
+                    severity=alert["severity"],
+                    countries=countries,
+                    valid_from=valid_from_str,
+                    valid_to=valid_to_str,
+                    language=lang,
+                    season=season,
+                    livelihood_hint=dominant_livelihood,
+                )
+                for lang in LANGUAGES
+            ]
+        )
+
+        for t in translations:
+            if t and not t.error:
+                result.translations_completed += 1
+                result.ensemble_winners[t.language] = t.provider
+            elif t:
+                result.errors.append(f"Translation {t.language} failed: {t.error}")
+
+        log.info("processor.translations_done", completed=result.translations_completed, total=len(LANGUAGES))
+
+        # Step 2: action cards, one per livelihood, sequential to avoid bursting.
+        for livelihood in LIVELIHOODS:
+            try:
+                card = await self._generate_action_card(
+                    alert_id=alert_id,
+                    hazard_type=alert["hazard_type"],
+                    severity=alert["severity"],
+                    countries=countries,
+                    livelihood=livelihood,
+                    season=season,
+                )
+                if card:
+                    await self._store_action_card(card)
+                    result.action_cards_completed += 1
+            except Exception as exc:
+                result.errors.append(f"Action card {livelihood}: {exc}")
+
+        log.info("processor.action_cards_done", completed=result.action_cards_completed)
+
+        # Step 3: community report severity assessment (ground-truth upgrade).
+        try:
+            upgrade = await self._assess_severity_upgrade(
+                alert_id=alert_id,
+                current_severity=alert["severity"],
+                hazard_type=alert["hazard_type"],
+            )
+            if upgrade and upgrade.should_upgrade:
+                result.upgrade_signal = upgrade
+                await self._apply_severity_upgrade(alert_id, upgrade)
+                log.info(
+                    "processor.severity_upgraded",
+                    from_=alert["severity"],
+                    to=upgrade.proposed_severity,
+                    confidence=upgrade.confidence,
+                )
+        except Exception as exc:
+            result.errors.append(f"Severity assessment: {exc}")
+
+        result.total_duration_ms = (time.perf_counter() - start) * 1000
+        log.info(
+            "processor.complete",
+            translations=result.translations_completed,
+            action_cards=result.action_cards_completed,
+            duration_ms=round(result.total_duration_ms, 1),
+            errors=len(result.errors),
+        )
+        return result
+
+    async def _translate_one(
+        self,
+        alert_id: UUID,
+        hazard_type: str,
+        severity: str,
+        countries: list[str],
+        valid_from: str,
+        valid_to: str,
+        language: str,
+        season: str | None,
+        livelihood_hint: str | None,
+    ) -> TranslationOutput | None:
+        try:
+            system = translation_system_prompt()
+            user = translation_user_prompt(
+                hazard_type=hazard_type,
+                severity=severity,
+                countries=countries,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                language_code=language,
+                season=season,
+                livelihood_hint=livelihood_hint,
+            )
+            output = await self.router.translate(system, user, language)
+            if output.headline:
+                await self._store_translation(alert_id, output)
+            return output
+        except Exception as exc:
+            logger.error("processor.translate_error", language=language, error=str(exc))
+            return None
+
+    async def _generate_action_card(
+        self,
+        alert_id: UUID,
+        hazard_type: str,
+        severity: str,
+        countries: list[str],
+        livelihood: str,
+        season: str | None,
+    ) -> ActionCard | None:
+        system = action_card_system_prompt()
+        user = action_card_user_prompt(
+            hazard_type=hazard_type,
+            severity=severity,
+            countries=countries,
+            livelihood=livelihood,
+            season=season,
+        )
+        steps = await self.router.complete(system, user)
+        if not steps:
+            return None
+        return ActionCard(
+            alert_id=alert_id,
+            livelihood=livelihood,
+            language="en",
+            steps=steps,
+            generated_by=ModelProvider.CLAUDE,
+        )
+
+    async def _assess_severity_upgrade(
+        self,
+        alert_id: UUID,
+        current_severity: str,
+        hazard_type: str,
+    ) -> AlertUpgradeSignal | None:
+        """Innovation 3: check if community reports support severity escalation.
+
+        Only runs if enough reports exist (GROUND_TRUTH_UPGRADE_THRESHOLD).
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT description FROM community_reports
+                WHERE reported_at > NOW() - INTERVAL '24 hours'
+                  AND ST_Intersects(
+                    location,
+                    (SELECT geom FROM alerts WHERE id = $1)
+                  )
+                LIMIT 20
+                """,
+                alert_id,
+            )
+
+        if len(rows) < settings.ground_truth_upgrade_threshold:
+            return None
+
+        descriptions = [r["description"] for r in rows if r["description"]]
+
+        system = severity_assessment_system_prompt()
+        user = severity_assessment_user_prompt(
+            current_severity=current_severity,
+            hazard_type=hazard_type,
+            report_count=len(rows),
+            descriptions=descriptions,
+        )
+
+        raw = await self.router.complete(system, user)
+        if not raw:
+            return None
+
+        try:
+            parsed = _parse_json_block(raw)
+            current_rank = SEVERITY_RANK.get(current_severity, 0)
+            proposed = parsed.get("proposed_severity", current_severity)
+            proposed_rank = SEVERITY_RANK.get(proposed, 0)
+            should_upgrade = bool(parsed.get("should_upgrade", False)) and proposed_rank > current_rank
+
+            return AlertUpgradeSignal(
+                alert_id=alert_id,
+                current_severity=current_severity,
+                proposed_severity=proposed,
+                report_count=len(rows),
+                confidence=float(parsed.get("confidence", 0.0)),
+                supporting_descriptions=descriptions[:5],
+                claude_reasoning=parsed.get("reasoning", ""),
+                should_upgrade=should_upgrade,
+            )
+        except Exception as exc:
+            logger.warning("processor.upgrade_parse_failed", error=str(exc))
+            return None
+
+    # -- DB operations ------------------------------------------------------------
+
+    async def _fetch_alert(self, alert_id: UUID) -> dict | None:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, hazard_type, severity, affected_countries, valid_from, valid_to
+                FROM alerts WHERE id = $1
+                """,
+                alert_id,
+            )
+        return dict(row) if row else None
+
+    async def _store_translation(self, alert_id: UUID, output: TranslationOutput) -> None:
+        async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO alert_translations (alert_id, language, headline, body)
                 VALUES ($1, $2, $3, $4)
-                ON CONFLICT (alert_id, language) DO UPDATE SET headline = EXCLUDED.headline, body = EXCLUDED.body
+                ON CONFLICT (alert_id, language) DO UPDATE
+                  SET headline = EXCLUDED.headline, body = EXCLUDED.body
                 """,
                 alert_id,
-                lang,
-                str(item.get("headline", fallback[lang]["headline"]))[:240],
-                str(item.get("body", fallback[lang]["body"]))[:1200],
+                output.language,
+                output.headline[:240],
+                output.body[:1200],
             )
 
-
-async def generate_action_cards(alert_id: UUID, hazard_type: str, severity: str, affected_countries: list[str], pool: asyncpg.Pool) -> None:
-    claude = ClaudeService(get_settings())
-    fallback = {livelihood: "1. Check official updates.\n2. Move people and key items away from danger.\n3. Share information with neighbours.\n4. Call local responders if help is needed." for livelihood in LIVELIHOODS}
-    data = await claude.json_prompt(
-        "Return JSON keyed by farmer, pastoralist, fisherfolk, urban. Each value is exactly 4 numbered plain-language actions. "
-        f"Hazard={hazard_type}, severity={severity}, countries={affected_countries}."
-    ) or fallback
-    async with pool.acquire() as conn:
-        for livelihood in LIVELIHOODS:
+    async def _store_action_card(self, card: ActionCard) -> None:
+        async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO action_cards (alert_id, livelihood, language, steps)
-                VALUES ($1, $2, 'en', $3)
-                ON CONFLICT (alert_id, livelihood, language) DO UPDATE SET steps = EXCLUDED.steps
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (alert_id, livelihood, language) DO UPDATE
+                  SET steps = EXCLUDED.steps
                 """,
-                alert_id,
-                livelihood,
-                str(data.get(livelihood, fallback[livelihood])),
+                card.alert_id,
+                card.livelihood,
+                card.language,
+                card.steps,
             )
 
+    async def _apply_severity_upgrade(self, alert_id: UUID, upgrade: AlertUpgradeSignal) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE alerts SET severity = $1, processed_at = NOW() WHERE id = $2",
+                upgrade.proposed_severity,
+                alert_id,
+            )
 
-async def classify_community_report(report_id: UUID, description: str, hazard_type: str, pool: asyncpg.Pool) -> list[str]:
-    claude = ClaudeService(get_settings())
-    data = await claude.json_prompt(
-        "Classify this community report into short labels from flooded-road, livestock-risk, crop-risk, water-shortage, disease-risk, infrastructure-damage, needs-verification. "
-        f"Return JSON with labels array. Do not overclaim certainty. Hazard={hazard_type}. Description={description}"
-    )
-    labels = [str(label) for label in data.get("labels", [])][:6] if data else []
+    async def classify_report(self, report_id: UUID, description: str, hazard_type: str) -> list[str]:
+        """Classify a community report description into labels.
+
+        Called asynchronously after report submission.
+        """
+        system = report_label_system_prompt()
+        user = report_label_user_prompt(description, hazard_type)
+
+        raw = await self.router.complete(system, user)
+        if not raw:
+            return []
+
+        try:
+            parsed = _parse_json_block(raw)
+            labels = [str(label) for label in parsed.get("labels", [])][:6]
+        except Exception:
+            labels = []
+
+        if labels:
+            async with self.pool.acquire() as conn:
+                await conn.execute("UPDATE community_reports SET labels = $1 WHERE id = $2", labels, report_id)
+
+        return labels
+
+
+# -- Module-level shared instance ------------------------------------------------
+
+_processor: AlertProcessor | None = None
+
+
+def get_processor(pool: asyncpg.Pool) -> AlertProcessor:
+    global _processor
+    if _processor is None:
+        _processor = AlertProcessor(pool)
+    return _processor
+
+
+async def process_backlog(pool: asyncpg.Pool) -> dict:
+    """Process alerts that don't have translations yet.
+
+    Called on startup and by the admin endpoint. Processes in batches to
+    avoid overwhelming API rate limits.
+    """
     async with pool.acquire() as conn:
-        await conn.execute("UPDATE community_reports SET labels = $2 WHERE id = $1", report_id, labels)
-    return labels
+        rows = await conn.fetch(
+            """
+            SELECT a.id FROM alerts a
+            WHERE NOT EXISTS (
+              SELECT 1 FROM alert_translations t
+              WHERE t.alert_id = a.id AND t.language = 'sw'
+            )
+            ORDER BY
+              CASE a.severity WHEN 'red' THEN 0 WHEN 'orange' THEN 1 ELSE 2 END,
+              a.created_at DESC
+            LIMIT $1
+            """,
+            settings.ai_backlog_batch_size,
+        )
 
+    alert_ids = [r["id"] for r in rows]
+    if not alert_ids:
+        logger.info("processor.backlog_empty")
+        return {"processed": 0, "total_found": 0, "errors": 0}
 
-async def process_new_alert(alert_id: UUID, pool: asyncpg.Pool) -> None:
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT hazard_type, severity, affected_countries FROM alerts WHERE id = $1", alert_id)
-    if row is None:
-        log.warning("alert_processing_skipped", alert_id=str(alert_id), reason="not_found")
-        return
-    await translate_alert(alert_id, row["hazard_type"], row["severity"], list(row["affected_countries"]), pool)
-    await generate_action_cards(alert_id, row["hazard_type"], row["severity"], list(row["affected_countries"]), pool)
+    logger.info("processor.backlog_start", count=len(alert_ids))
+    processor = get_processor(pool)
+    sem = asyncio.Semaphore(settings.ai_max_concurrent_alerts)
+
+    async def process_one(aid: UUID) -> ProcessingResult:
+        async with sem:
+            return await processor.process_alert(aid)
+
+    results = await asyncio.gather(*[process_one(aid) for aid in alert_ids], return_exceptions=True)
+
+    completed = sum(1 for r in results if isinstance(r, ProcessingResult))
+    errors = sum(1 for r in results if isinstance(r, Exception))
+
+    logger.info("processor.backlog_complete", total=len(alert_ids), completed=completed, errors=errors)
+    return {"total_found": len(alert_ids), "processed": completed, "errors": errors}

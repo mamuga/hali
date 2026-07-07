@@ -1,0 +1,119 @@
+name: HALI — Test + Deploy to Railway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── Test backend ─────────────────────────────────────────────────────────────
+  test-backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+
+    env:
+      HALI_TEST_MODE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        working-directory: apps/backend
+        run: poetry install --no-interaction
+
+      - name: Run tests
+        working-directory: apps/backend
+        run: poetry run pytest tests/ -v --tb=short
+
+      - name: Lint
+        working-directory: apps/backend
+        run: poetry run ruff check src/
+
+  # ── Test frontend build ─────────────────────────────────────────────────────
+  test-frontend:
+    name: Frontend build check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # The lockfile was generated with npm 11.6.2; newer npm releases have
+      # tightened the ci consistency check and reject it with EUSAGE.
+      - name: Pin npm version
+        run: npm install -g npm@11.6.2
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build frontend
+        env:
+          VITE_API_URL: ${{ secrets.RAILWAY_BACKEND_URL }}
+        run: npx nx run frontend:build
+
+      - name: Confirm build output
+        run: |
+          ls -lh dist/apps/frontend/
+          test -f dist/apps/frontend/index.html && echo "index.html OK"
+
+  # ── Deploy backend to Railway ───────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy backend → Railway
+    needs: [test-backend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy backend service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service backend --environment production --detach -m "deploy ${{ github.sha }}"
+
+      - name: Deployment summary
+        run: |
+          echo "## Backend Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: backend" >> $GITHUB_STEP_SUMMARY
+          echo "- By: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  # ── Deploy frontend to Railway ──────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy frontend → Railway
+    needs: [test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy frontend service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service frontend --environment production --detach -m "deploy ${{ github.sha }}"
+
+      - name: Deployment summary
+        run: |
+          echo "## Frontend Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: frontend (Caddy + React PWA)" >> $GITHUB_STEP_SUMMARY

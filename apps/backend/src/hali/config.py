@@ -19,6 +19,29 @@ class Settings(BaseSettings):
     africastalking_username: str = "sandbox"
     africastalking_api_key: str | None = None
 
+    # WhatsApp Cloud API (Meta)
+    whatsapp_token: str = ""  # permanent system user access token
+    whatsapp_phone_number_id: str = ""
+    whatsapp_verify_token: str = "hali_webhook_2026"
+    whatsapp_app_secret: str = ""  # Meta App Secret, used to verify X-Hub-Signature-256
+    whatsapp_api_version: str = "v21.0"
+
+    # AI model config
+    ai_primary_model: str = "claude-sonnet-4-6"
+    ai_gemini_model: str = "gemini-2.5-flash"
+    ai_groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    ai_ensemble_enabled: bool = True
+    ai_min_clarity_score: float = 0.6
+
+    # Fallback API keys
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+
+    # AI processing config
+    ai_backlog_batch_size: int = 10
+    ai_max_concurrent_alerts: int = 5
+    ground_truth_upgrade_threshold: int = 3
+
     enable_scheduler: bool = True
     enable_gdacs: bool = True
     enable_chirps: bool = False
@@ -44,6 +67,15 @@ class Settings(BaseSettings):
     @property
     def asyncpg_dsn(self) -> str:
         return self.database_url.replace("postgresql+asyncpg://", "postgresql://")
+
+    @property
+    def whatsapp_enabled(self) -> bool:
+        return bool(self.whatsapp_token and self.whatsapp_phone_number_id)
+
+    @property
+    def ai_enabled(self) -> bool:
+        """True if at least one AI provider (Claude, Gemini, Groq) is configured."""
+        return bool(self.anthropic_api_key or self.gemini_api_key or self.groq_api_key)
 
     @property
     def cors_origin_list(self) -> list[str]:

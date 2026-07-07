@@ -31,6 +31,10 @@ cdsapi = ">=0.7"
 ftputil = ">=5.1"
 pydantic = ">=2.10"
 python-dateutil = ">=2.9"
+google-generativeai = ">=0.8"
+groq = ">=0.12"
+asyncio-throttle = ">=1.0"
+nltk = ">=3.9"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.1.1"

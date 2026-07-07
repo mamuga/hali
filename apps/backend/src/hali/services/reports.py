@@ -3,7 +3,7 @@ from uuid import UUID
 
 import asyncpg
 
-from hali.ai.processor import classify_community_report
+from hali.ai.processor import get_processor
 from hali.config import get_settings
 from hali.repositories.reports import ReportRepository
 from hali.schemas.alert import CommunityReportCreate
@@ -17,8 +17,9 @@ class ReportService:
     async def create(self, report: CommunityReportCreate) -> dict:
         created = await self.repo.create(report)
         settings = get_settings()
-        if settings.anthropic_api_key:
-            asyncio.create_task(classify_community_report(UUID(str(created["id"])), report.description, report.hazard_type, self.pool))
+        if settings.ai_enabled:
+            processor = get_processor(self.pool)
+            asyncio.create_task(processor.classify_report(UUID(str(created["id"])), report.description, report.hazard_type))
         return created
 
     async def heatmap(self, days: int) -> dict:
