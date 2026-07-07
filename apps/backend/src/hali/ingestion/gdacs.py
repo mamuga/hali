@@ -17,6 +17,11 @@ from .normaliser import GDACS_HAZARD_MAP, GDACS_SEVERITY_MAP, parse_iso_datetime
 logger = structlog.get_logger(__name__)
 GDACS_SEARCH_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH"
 
+# GDACS SEARCH ignores the bbox query param server-side (verified: identical
+# results regardless of bbox value), so East Africa scoping must happen here.
+# Must match the `countries` table (IGAD member states).
+IGAD_ISO2 = {"KE", "ET", "SO", "UG", "DJ", "ER", "SD", "SS"}
+
 
 class GdacsAdapter(BaseAdapter):
     source = SourceName.GDACS
@@ -74,6 +79,11 @@ class GdacsAdapter(BaseAdapter):
 
             alert_level = props.get("alertlevel", "Green")
             iso3 = props.get("iso3") or ""
+            iso2 = iso3[:2].upper()
+            if iso2 not in IGAD_ISO2:
+                logger.debug("gdacs.validate_outside_east_africa", event_id=raw.source_event_id, iso3=iso3)
+                return None
+
             source_url = props.get("url") or props.get("link")
             if isinstance(source_url, dict):
                 source_url = source_url.get("report") or source_url.get("details") or source_url.get("geometry")
@@ -87,7 +97,7 @@ class GdacsAdapter(BaseAdapter):
                 geometry=GeoJSONGeometry(type=geom["type"], coordinates=geom["coordinates"]),
                 valid_from=parse_iso_datetime(props.get("fromdate")),
                 valid_to=parse_iso_datetime(props.get("todate")),
-                affected_countries=[iso3[:2].upper()] if iso3 else [],
+                affected_countries=[iso2],
                 extra={
                     "country_name": props.get("countryname", ""),
                     "event_name": props.get("eventname", ""),

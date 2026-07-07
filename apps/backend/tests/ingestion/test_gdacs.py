@@ -57,6 +57,18 @@ async def test_extract_handles_http_error(adapter):
         assert await adapter.extract() == []
 
 
+def test_validate_rejects_outside_east_africa(adapter):
+    """GDACS ignores the bbox query param server-side, so validate() must
+    reject events outside the 8 IGAD countries itself."""
+    feature = {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [8.5, 47.0]},
+        "properties": {"eventid": "5000", "eventtype": "EQ", "alertlevel": "Green", "iso3": "CHE"},
+    }
+    raw = RawPayload(source=SourceName.GDACS, raw_data=feature, source_event_id="5000")
+    assert adapter.validate(raw) is None
+
+
 def test_unknown_event_type_maps_to_other(adapter):
     feature = {
         "type": "Feature",
