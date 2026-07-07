@@ -90,7 +90,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) return 'leaflet';
+          if (id.includes('node_modules/leaflet/') || id.includes('node_modules/react-leaflet')) return 'leaflet';
           if (id.includes('node_modules/react-router-dom') || id.includes('node_modules/react-router')) return 'router';
           if (id.includes('node_modules/@radix-ui')) return 'shadcn';
           if (id.includes('node_modules/react') || id.includes('node_modules/sonner')) return 'vendor';

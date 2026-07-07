@@ -12,6 +12,10 @@ import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl });
 
+// leaflet.heat is a plain UMD script that expects a preexisting global `L`
+// rather than importing it, so it must be exposed on window before it loads.
+(window as unknown as { L: typeof L }).L = L;
+
 const SEV_COLOUR: Record<string, string> = {
   red: '#dc2626',
   orange: '#ea580c',
