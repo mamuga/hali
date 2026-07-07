@@ -3,11 +3,13 @@ from uuid import UUID
 import asyncpg
 from fastapi import HTTPException
 
+from hali.config import settings
 from hali.repositories.alerts import AlertRepository
 
 
 class AlertService:
     def __init__(self, pool: asyncpg.Pool) -> None:
+        self.pool = pool
         self.repo = AlertRepository(pool)
 
     async def list_alerts(self, lang: str, lat: float | None, lng: float | None, limit: int) -> list[dict]:
@@ -20,7 +22,25 @@ class AlertService:
         return await self.repo.geojson(parts, lang, severity, hazard)
 
     async def action_card(self, alert_id: UUID, livelihood: str, lang: str) -> dict:
+        # 1. Fast path - exact livelihood/language match already stored.
         card = await self.repo.action_card(alert_id, livelihood, lang)
-        if card is None:
-            raise HTTPException(status_code=404, detail="action card not found")
-        return card
+        if card is not None:
+            return card
+
+        # 2. Not backfilled yet - generate on demand and cache it for next time.
+        if lang != "en" and settings.ai_enabled:
+            from hali.ai.processor import get_processor
+
+            try:
+                generated = await get_processor(self.pool).generate_action_card_on_demand(alert_id, livelihood, lang)
+            except Exception:
+                generated = None
+            if generated is not None:
+                return generated.model_dump()
+
+        # 3. Fall back to English rather than a bare 404 if it exists.
+        card = await self.repo.action_card(alert_id, livelihood, "en")
+        if card is not None:
+            return card
+
+        raise HTTPException(status_code=404, detail="action card not found")

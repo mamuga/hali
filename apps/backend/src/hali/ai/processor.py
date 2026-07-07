@@ -124,22 +124,24 @@ class AlertProcessor:
 
         log.info("processor.translations_done", completed=result.translations_completed, total=len(LANGUAGES))
 
-        # Step 2: action cards, one per livelihood, sequential to avoid bursting.
+        # Step 2: action cards, one per livelihood x language, sequential to avoid bursting.
         for livelihood in LIVELIHOODS:
-            try:
-                card = await self._generate_action_card(
-                    alert_id=alert_id,
-                    hazard_type=alert["hazard_type"],
-                    severity=alert["severity"],
-                    countries=countries,
-                    livelihood=livelihood,
-                    season=season,
-                )
-                if card:
-                    await self._store_action_card(card)
-                    result.action_cards_completed += 1
-            except Exception as exc:
-                result.errors.append(f"Action card {livelihood}: {exc}")
+            for lang in LANGUAGES:
+                try:
+                    card = await self._generate_action_card(
+                        alert_id=alert_id,
+                        hazard_type=alert["hazard_type"],
+                        severity=alert["severity"],
+                        countries=countries,
+                        livelihood=livelihood,
+                        season=season,
+                        language=lang,
+                    )
+                    if card:
+                        await self._store_action_card(card)
+                        result.action_cards_completed += 1
+                except Exception as exc:
+                    result.errors.append(f"Action card {livelihood}/{lang}: {exc}")
 
         log.info("processor.action_cards_done", completed=result.action_cards_completed)
 
@@ -212,6 +214,7 @@ class AlertProcessor:
         countries: list[str],
         livelihood: str,
         season: str | None,
+        language: str = "en",
     ) -> ActionCard | None:
         system = action_card_system_prompt()
         user = action_card_user_prompt(
@@ -220,6 +223,7 @@ class AlertProcessor:
             countries=countries,
             livelihood=livelihood,
             season=season,
+            language=language,
         )
         steps = await self.router.complete(system, user)
         if not steps:
@@ -227,10 +231,36 @@ class AlertProcessor:
         return ActionCard(
             alert_id=alert_id,
             livelihood=livelihood,
-            language="en",
+            language=language,
             steps=steps,
             generated_by=ModelProvider.CLAUDE,
         )
+
+    async def generate_action_card_on_demand(
+        self, alert_id: UUID, livelihood: str, language: str
+    ) -> ActionCard | None:
+        """Generate and store a single action card, used when the API is asked
+        for a livelihood/language combination that hasn't been backfilled yet.
+        """
+        alert = await self._fetch_alert(alert_id)
+        if not alert:
+            return None
+
+        season = get_season(alert.get("valid_from"))
+        countries = list(alert.get("affected_countries") or [])
+
+        card = await self._generate_action_card(
+            alert_id=alert_id,
+            hazard_type=alert["hazard_type"],
+            severity=alert["severity"],
+            countries=countries,
+            livelihood=livelihood,
+            season=season,
+            language=language,
+        )
+        if card:
+            await self._store_action_card(card)
+        return card
 
     async def _assess_severity_upgrade(
         self,

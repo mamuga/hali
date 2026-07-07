@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     chirps_ftp_host: str = "ftp.chg.ucsb.edu"
 
     enable_admin_endpoints: bool = True
+
+    # Admin API key - protects /api/admin/* endpoints.
+    # Set ADMIN_API_KEY in Railway env vars to a strong random string.
+    # Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+    admin_api_key: str = ""
+
     east_africa_bbox: str = "21,-12,52,24"
     gdacs_alert_levels: str = "Green,Orange,Red"
     gdacs_event_types: str = "FL,DR,TC,EQ,VO,WF"
@@ -80,6 +86,11 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_auth_enabled(self) -> bool:
+        """Admin key auth is active only when a key is configured."""
+        return bool(self.admin_api_key)
 
 
 @lru_cache

@@ -59,12 +59,15 @@ class AlertRepository:
         return json.loads(value) if isinstance(value, str) else value
 
     async def action_card(self, alert_id: UUID, livelihood: str, lang: str) -> dict[str, Any] | None:
+        """Exact livelihood/language match only - no silent language fallback.
+
+        Callers that want a fallback (e.g. to 'en') should query again
+        explicitly, so it's visible when a requested language is missing.
+        """
         sql = """
         SELECT alert_id, livelihood, language, steps
         FROM action_cards
-        WHERE alert_id = $1 AND livelihood = $2 AND language IN ($3, 'en')
-        ORDER BY CASE WHEN language = $3 THEN 0 ELSE 1 END
-        LIMIT 1
+        WHERE alert_id = $1 AND livelihood = $2 AND language = $3
         """
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(sql, alert_id, livelihood, lang)

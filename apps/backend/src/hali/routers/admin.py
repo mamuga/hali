@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from hali.config import settings
+from hali.dependencies import require_admin
 from hali.scheduler import run_all_ingestion, run_single_source
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 VALID_SOURCES = {"gdacs", "chirps", "gfs", "glofas", "icpac"}
 
 
@@ -20,8 +21,6 @@ class TriggerResponse(BaseModel):
 
 @router.post("/trigger-ingest", response_model=TriggerResponse)
 async def trigger_ingest(source: str | None = None):
-    if not settings.enable_admin_endpoints:
-        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     if source:
         if source not in VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"Unknown source {source!r}. Valid: {sorted(VALID_SOURCES)}")
@@ -33,8 +32,6 @@ async def trigger_ingest(source: str | None = None):
 
 @router.get("/pipeline-status")
 async def pipeline_status():
-    if not settings.enable_admin_endpoints:
-        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     return {
         "scheduler_enabled": settings.enable_scheduler,
         "sources": {
@@ -51,8 +48,6 @@ async def pipeline_status():
 @router.post("/process-backlog")
 async def trigger_backlog():
     """Process all alerts missing AI translations through the AI pipeline."""
-    if not settings.enable_admin_endpoints:
-        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     from hali.ai.processor import process_backlog
     from hali.database import get_pool
 
@@ -62,8 +57,6 @@ async def trigger_backlog():
 @router.post("/process-alert/{alert_id}")
 async def process_single_alert(alert_id: UUID):
     """Process one specific alert through the AI pipeline. Good for demos."""
-    if not settings.enable_admin_endpoints:
-        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     from hali.ai.processor import get_processor
     from hali.database import get_pool
 
@@ -75,8 +68,6 @@ async def process_single_alert(alert_id: UUID):
 @router.get("/ai-stats")
 async def ai_stats():
     """Return AI router request counts per provider."""
-    if not settings.enable_admin_endpoints:
-        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     from hali.ai import processor as processor_module
 
     if processor_module._processor is None:

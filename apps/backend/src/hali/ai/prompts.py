@@ -114,9 +114,11 @@ def action_card_user_prompt(
     countries: list[str],
     livelihood: str,
     season: str | None = None,
+    language: str = "en",
 ) -> str:
     livelihood_desc = LIVELIHOOD_CONTEXT.get(livelihood, livelihood)
     season_note = SEASON_CONTEXT.get(season or "", "")
+    lang_name = LANGUAGE_NAMES.get(language, "English")
 
     return f"""Create a 48-hour action plan for this community.
 
@@ -127,8 +129,14 @@ ALERT:
 
 AUDIENCE: {livelihood_desc}
 
+LANGUAGE: Write your response entirely in {lang_name}. If writing in a
+non-Latin script language (Amharic, Arabic), use the correct script. If
+writing in a Latin-script African language (Swahili, Somali, Oromo), use
+that language's vocabulary - do NOT translate to English.
+
 What are the 4 most important things this community should do in the next 48 hours?
-Write for people who may be illiterate - steps must be simple enough to be read aloud."""
+Write for people who may be illiterate - steps must be simple enough to be read aloud
+in {lang_name}."""
 
 
 def severity_assessment_system_prompt() -> str:
