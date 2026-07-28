@@ -1,15 +1,15 @@
-"""seed igad country bounding boxes
+"""replace bounding-box country placeholders with real boundaries
 
-Revision ID: 003_seed_igad_countries
-Revises: 002_create_tables
-Create Date: 2026-07-02
+Revision ID: 006_real_country_boundaries
+Revises: 005_alert_broadcast_tracking
+Create Date: 2026-07-28
 """
 from pathlib import Path
 
 from alembic import op
 
-revision = "003_seed_igad_countries"
-down_revision = "002_create_tables"
+revision = "006_real_country_boundaries"
+down_revision = "005_alert_broadcast_tracking"
 branch_labels = None
 depends_on = None
 
@@ -25,8 +25,9 @@ def _read_sql(name: str) -> str:
 
 
 def upgrade() -> None:
-    op.execute(_read_sql("003_seed_igad_countries.sql"))
+    op.execute(_read_sql("006_real_country_boundaries.sql"))
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM countries WHERE iso2 IN ('KE','ET','SO','UG','DJ','ER','SD','SS')")
+    # Restore the bounding boxes from 003 rather than leaving geometry empty.
+    op.execute(_read_sql("003_seed_igad_countries.sql"))

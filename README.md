@@ -233,7 +233,9 @@ Configure Africa's Talking to POST to `/ussd`. The flow uses `CON` for continuin
 
 ## Database Contract
 
-The SQL mirrors in `sql/migrations` are the Railway bootstrap contract. `alerts.geom`, `community_reports.location`, and `countries.geom` are PostGIS geometry columns in EPSG:4326. Spatial indexes are named `alerts_geom_idx`, `community_reports_geom_idx`, and `countries_geom_idx`.
+The SQL mirrors in `sql/migrations` are the Railway bootstrap contract. `alerts.geom`, `community_reports.location`, `countries.geom`, `user_subscriptions.location`, and `emerging_hotspots.location` are PostGIS geometry columns in EPSG:4326. Spatial indexes are named `alerts_geom_idx`, `community_reports_geom_idx`, `countries_geom_idx`, `user_subscriptions_loc_idx`, and `emerging_hotspots_geom_idx`.
+
+On Railway the backend container applies `alembic upgrade head` on start-up (see `apps/backend/docker-entrypoint.sh`), so a deploy carries its own schema. Migrations are fail-closed — a broken migration aborts the boot and Railway keeps the previous deployment serving.
 
 `DATABASE_URL` uses the `postgresql+asyncpg://` prefix for application configuration. `DATABASE_URL_RAW` and `MIGRATION_DATABASE_URL` use the raw `postgresql://` prefix for `psql`, Alembic, and other CLI tools.
 

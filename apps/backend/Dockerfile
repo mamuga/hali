@@ -50,6 +50,11 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY apps/backend/src ./src
 COPY apps/backend/alembic ./alembic
 COPY apps/backend/alembic.ini ./alembic.ini
+# Alembic revisions execute these SQL mirrors — without them `alembic upgrade
+# head` fails inside the image.
+COPY sql ./sql
+COPY apps/backend/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 ENV PYTHONPATH=/app/src
 ENV PORT=8000
@@ -59,8 +64,4 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:$PORT/health || exit 1
 
-CMD uvicorn hali.main:app \
-    --host 0.0.0.0 \
-    --port $PORT \
-    --workers 1 \
-    --log-level info
+CMD ["./docker-entrypoint.sh"]

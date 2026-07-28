@@ -14,7 +14,11 @@ target_metadata = None
 
 
 def get_url() -> str:
-    url = getenv("MIGRATION_DATABASE_URL", "postgresql://hali:hali@localhost:5432/hali")
+    # Railway injects DATABASE_URL; MIGRATION_DATABASE_URL wins when both are set
+    # so migrations can be pointed at a different host than the running app.
+    url = getenv("MIGRATION_DATABASE_URL") or getenv("DATABASE_URL") or "postgresql://hali:hali@localhost:5433/hali"
+    # The app DSN carries the asyncpg driver; Alembic runs sync via psycopg.
+    url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
     return url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 
