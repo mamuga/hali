@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface Coords {
   lat: number;
@@ -10,16 +10,18 @@ export function useLocation() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const request = useCallback(() => {
     if (!navigator.geolocation) {
       setError('Geolocation not available');
       setLoading(false);
       return;
     }
 
+    setLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setError(null);
         setLoading(false);
       },
       () => {
@@ -30,5 +32,11 @@ export function useLocation() {
     );
   }, []);
 
-  return { coords, error, loading };
+  useEffect(() => {
+    request();
+  }, [request]);
+
+  // `request` lets a caller retry after the user denies or dismisses the
+  // browser prompt, which the mount-only version could not do.
+  return { coords, error, loading, request };
 }

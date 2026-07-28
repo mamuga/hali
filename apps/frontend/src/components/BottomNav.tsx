@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Bell, BookOpen, Map, Radio } from 'lucide-react';
+import { Bell, BellRing, BookOpen, Map, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const LINKS = [
@@ -7,6 +7,7 @@ const LINKS = [
   { to: '/map', label: 'Map', Icon: Map },
   { to: '/actions', label: 'Actions', Icon: BookOpen },
   { to: '/report', label: 'Report', Icon: Radio },
+  { to: '/subscribe', label: 'Subscribe', Icon: BellRing },
 ];
 
 export function BottomNav() {

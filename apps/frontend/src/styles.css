@@ -164,6 +164,41 @@ button { cursor: pointer; }
   letter-spacing: 0.04em;
 }
 
+/* Emerging hotspots: amber dots that pulse, so an unconfirmed community
+   cluster reads as distinct from an official alert zone. */
+.hali-hotspot-dot,
+.hali-hotspot-legend {
+  display: block;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.65);
+}
+
+.hali-hotspot-dot {
+  width: var(--hotspot-size, 18px);
+  height: var(--hotspot-size, 18px);
+  margin-left: calc(var(--hotspot-size, 18px) / -2);
+  margin-top: calc(var(--hotspot-size, 18px) / -2);
+  animation: hotspot-pulse 2s infinite;
+}
+
+.hali-hotspot-legend {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+@keyframes hotspot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.65); }
+  70%  { box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hali-hotspot-dot { animation: none; }
+}
+
 @keyframes shimmer {
   0% { background-position: -600px 0; }
   100% { background-position: 600px 0; }

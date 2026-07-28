@@ -6,8 +6,13 @@ import type {
   CommunityHeatmapFeatureCollection,
   CommunityReport,
   CommunityReportResponse,
+  CompoundRiskGeoJSON,
+  EmergingHotspotGeoJSON,
   Language,
   Livelihood,
+  SpatialAnalysis,
+  SubscriptionCreate,
+  SubscriptionResponse,
 } from '@hali/types';
 import { env } from './env';
 
@@ -35,11 +40,43 @@ export async function fetchAlertsGeoJSON(
   bbox = '21,-12,52,24',
   severity?: string,
   hazard?: string,
+  fromDate?: string,
+  toDate?: string,
 ): Promise<AlertGeoJSON> {
   const params: Record<string, string> = { lang, bbox };
   if (severity) params.severity = severity;
   if (hazard) params.hazard = hazard;
+  // Supplying a range switches the backend from "currently active" to
+  // "overlapping this window", which is what temporal playback needs.
+  if (fromDate) params.from_date = fromDate;
+  if (toDate) params.to_date = toDate;
   const { data } = await api.get<AlertGeoJSON>('/api/alerts/geojson', { params });
+  return data;
+}
+
+export async function fetchCompoundRisk(): Promise<CompoundRiskGeoJSON> {
+  const { data } = await api.get<CompoundRiskGeoJSON>('/api/spatial/compound-risk');
+  return data;
+}
+
+export async function fetchEmergingHotspots(): Promise<EmergingHotspotGeoJSON> {
+  const { data } = await api.get<EmergingHotspotGeoJSON>('/api/spatial/emerging-hotspots');
+  return data;
+}
+
+export async function analyseLocation(
+  lat: number,
+  lng: number,
+  lang: Language = 'en',
+): Promise<SpatialAnalysis> {
+  const { data } = await api.get<SpatialAnalysis>('/api/spatial/analyse', {
+    params: { lat, lng, lang },
+  });
+  return data;
+}
+
+export async function subscribe(payload: SubscriptionCreate): Promise<SubscriptionResponse> {
+  const { data } = await api.post<SubscriptionResponse>('/api/subscriptions', payload);
   return data;
 }
 

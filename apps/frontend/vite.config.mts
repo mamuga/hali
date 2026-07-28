@@ -33,15 +33,11 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],
+        // Order matters: Workbox uses the first matching route. The more
+        // specific /api/alerts/* patterns must precede the alert-feed pattern,
+        // which would otherwise swallow /api/alerts/geojson?... into the wrong
+        // cache because that URL also ends in a query string.
         runtimeCaching: [
-          {
-            urlPattern: /\/api\/alerts(\?.*)?$/,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'hali-alerts',
-              expiration: { maxEntries: 30, maxAgeSeconds: 300 },
-            },
-          },
           {
             urlPattern: /\/api\/alerts\/geojson/,
             handler: 'StaleWhileRevalidate',
@@ -56,6 +52,33 @@ export default defineConfig({
             options: {
               cacheName: 'hali-action-cards',
               expiration: { maxEntries: 100, maxAgeSeconds: 86400 },
+            },
+          },
+          {
+            urlPattern: /\/api\/alerts(\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hali-alerts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 300 },
+            },
+          },
+          {
+            urlPattern: /\/api\/spatial\//,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hali-spatial',
+              expiration: { maxEntries: 30, maxAgeSeconds: 300 },
+            },
+          },
+          {
+            // ICPAC's WMS tiles are large; cache them like basemap tiles so
+            // toggling a layer back on is instant and works offline.
+            urlPattern: /^https:\/\/geoportal\.icpac\.net\/geoserver\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'icpac-wms',
+              expiration: { maxEntries: 300, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
           {
@@ -103,6 +126,7 @@ export default defineConfig({
     watch: false,
     globals: true,
     environment: 'jsdom',
+    setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
     coverage: { reportsDirectory: '../../coverage/apps/frontend', provider: 'v8' },

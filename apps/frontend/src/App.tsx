@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { BottomNav } from '@/components/BottomNav';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useReportQueue } from '@/hooks/useReportQueue';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import 'leaflet/dist/leaflet.css';
 
@@ -11,6 +12,7 @@ const MapView = lazy(() => import('@/pages/MapView').then((m) => ({ default: m.M
 const ActionCardPage = lazy(() => import('@/pages/ActionCard').then((m) => ({ default: m.ActionCardPage })));
 const ReportForm = lazy(() => import('@/pages/ReportForm').then((m) => ({ default: m.ReportForm })));
 const OfflinePage = lazy(() => import('@/pages/Offline').then((m) => ({ default: m.OfflinePage })));
+const SubscribePage = lazy(() => import('@/pages/Subscribe').then((m) => ({ default: m.SubscribePage })));
 
 function PageFallback() {
   return (
@@ -24,6 +26,9 @@ function PageFallback() {
 
 function AppShell() {
   const { resolvedTheme } = useTheme();
+  // Drains reports queued while offline. Without this mounted somewhere, queued
+  // reports were written to localStorage and never sent.
+  useReportQueue();
 
   return (
     <BrowserRouter>
@@ -35,6 +40,7 @@ function AppShell() {
               <Route path="/map" element={<MapView />} />
               <Route path="/actions" element={<ActionCardPage />} />
               <Route path="/report" element={<ReportForm />} />
+              <Route path="/subscribe" element={<SubscribePage />} />
               <Route path="/offline" element={<OfflinePage />} />
             </Routes>
           </Suspense>

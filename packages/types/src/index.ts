@@ -24,6 +24,8 @@ export interface Alert {
   headline?: string;
   body?: string;
   audio_url?: string | null;
+  /** WorldPop estimate. null means "not computed yet", never "nobody lives here". */
+  population_exposed?: number | null;
 }
 
 export interface AlertTranslation {
@@ -61,6 +63,8 @@ export interface AlertFeatureProperties {
   headline: string;
   body: string;
   affected_countries: string[];
+  /** WorldPop estimate. null means "not computed yet", never "nobody lives here". */
+  population_exposed: number | null;
   valid_from: string | null;
   valid_to: string | null;
 }
@@ -72,6 +76,83 @@ export interface AlertGeoJSON {
     geometry: GeoJSON.MultiPolygon;
     properties: AlertFeatureProperties;
   }>;
+}
+
+export interface CompoundRiskProperties {
+  iso2: string;
+  country: string;
+  compound_risk_score: number;
+  dominant_hazard: HazardType;
+  alert_count: number;
+  max_severity: Severity;
+  overlap_km2: number;
+  community_reports_14d: number;
+}
+
+export interface CompoundRiskGeoJSON {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    geometry: GeoJSON.MultiPolygon;
+    properties: CompoundRiskProperties;
+  }>;
+}
+
+export interface EmergingHotspotProperties {
+  id: string;
+  report_count: number;
+  dominant_hazard: HazardType;
+  confidence: number;
+  status: string;
+  first_reported: string;
+  detected_at: string;
+}
+
+export interface EmergingHotspotGeoJSON {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    geometry: GeoJSON.Point;
+    properties: EmergingHotspotProperties;
+  }>;
+}
+
+export interface NearestAlert {
+  id: string;
+  hazard_type: HazardType;
+  severity: Severity;
+  headline: string;
+  dist_km: number;
+  valid_to: string | null;
+  population_exposed: number | null;
+}
+
+export interface SpatialAnalysis {
+  location: { lat: number; lng: number };
+  country: string | null;
+  nearest_alerts: NearestAlert[];
+  nearby_reports_7d: number;
+  report_breakdown: Array<{ label: string; count: number }>;
+  emerging_hotspots_nearby: number;
+}
+
+export interface SubscriptionCreate {
+  phone_number: string;
+  channel?: "sms" | "whatsapp" | "both";
+  language?: Language;
+  livelihood?: Livelihood;
+  preferred_iso2?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}
+
+export interface SubscriptionResponse {
+  id: string;
+  channel: string;
+  language: Language;
+  livelihood: Livelihood;
+  preferred_iso2: string | null;
+  opted_in: boolean;
 }
 
 export interface CommunityHeatmapFeatureCollection {

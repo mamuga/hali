@@ -6,7 +6,10 @@ import { useOnlineStatus } from './useOnlineStatus';
 
 export function useReportQueue() {
   const online = useOnlineStatus();
-  const [count, setCount] = useState(offlineQueue.count);
+  // Must be wrapped: React treats a bare function as a lazy initialiser and
+  // calls it unbound, so `offlineQueue.count` would run with `this` undefined
+  // and throw inside `this.get()`.
+  const [count, setCount] = useState(() => offlineQueue.count());
 
   const refresh = useCallback(() => setCount(offlineQueue.count()), []);
 
