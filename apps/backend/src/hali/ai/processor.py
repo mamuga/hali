@@ -23,16 +23,17 @@ import asyncpg
 import structlog
 
 from hali.config import settings
+from hali.services.broadcast import broadcast_alert
 
 from .context import get_dominant_livelihood, get_season
 from .models import (
     ActionCard,
     AlertUpgradeSignal,
-    ModelProvider,
     ProcessingResult,
     TranslationOutput,
 )
 from .prompts import (
+    VALID_REPORT_LABELS,
     action_card_system_prompt,
     action_card_user_prompt,
     report_label_system_prompt,
@@ -50,6 +51,11 @@ LANGUAGES = ["sw", "so", "am", "om", "ar", "en"]
 LIVELIHOODS = ["farmer", "pastoralist", "fisherfolk", "urban"]
 
 SEVERITY_RANK = {"green": 0, "orange": 1, "red": 2}
+
+# Spec §3.6: community ground truth may only raise an official alert's severity
+# when the model is reasonably sure. An upgrade now also triggers a real SMS
+# broadcast, so the bar matters.
+MIN_UPGRADE_CONFIDENCE = 0.6
 
 
 def _parse_json_block(raw: str) -> dict:
@@ -124,9 +130,14 @@ class AlertProcessor:
 
         log.info("processor.translations_done", completed=result.translations_completed, total=len(LANGUAGES))
 
-        # Step 2: action cards, one per livelihood x language, sequential to avoid bursting.
-        for livelihood in LIVELIHOODS:
-            for lang in LANGUAGES:
+        # Step 2: action cards, one per livelihood x language.
+        # Bounded concurrency rather than fully sequential: 24 serial LLM calls
+        # dominated per-alert latency. The semaphore keeps the burst inside
+        # free-tier rate limits (Gemini allows 5 requests/minute).
+        card_semaphore = asyncio.Semaphore(settings.ai_max_concurrent_alerts)
+
+        async def build_card(livelihood: str, lang: str) -> None:
+            async with card_semaphore:
                 try:
                     card = await self._generate_action_card(
                         alert_id=alert_id,
@@ -140,8 +151,15 @@ class AlertProcessor:
                     if card:
                         await self._store_action_card(card)
                         result.action_cards_completed += 1
+                    else:
+                        # Without this the pipeline reported errors=0 while
+                        # producing zero action cards, so a total provider
+                        # outage looked like a clean run.
+                        result.errors.append(f"Action card {livelihood}/{lang}: no card generated")
                 except Exception as exc:
                     result.errors.append(f"Action card {livelihood}/{lang}: {exc}")
+
+        await asyncio.gather(*(build_card(lv, lang) for lv in LIVELIHOODS for lang in LANGUAGES))
 
         log.info("processor.action_cards_done", completed=result.action_cards_completed)
 
@@ -161,8 +179,35 @@ class AlertProcessor:
                     to=upgrade.proposed_severity,
                     confidence=upgrade.confidence,
                 )
+                # Everything generated above states the old severity, and
+                # _apply_severity_upgrade has just deleted it. Regenerate now,
+                # before the broadcast below, so subscribers are not told "orange"
+                # about an alert that is now red — or sent nothing at all.
+                alert["severity"] = upgrade.proposed_severity
+                await self._regenerate_content(
+                    alert_id=alert_id,
+                    alert=alert,
+                    countries=countries,
+                    season=season,
+                    dominant_livelihood=dominant_livelihood,
+                    valid_from=valid_from_str,
+                    valid_to=valid_to_str,
+                    result=result,
+                    log=log,
+                )
         except Exception as exc:
             result.errors.append(f"Severity assessment: {exc}")
+
+        # Step 4: fan out to subscribers. Runs last so translations and action
+        # cards already exist — subscribers must never receive an untranslated
+        # alert. broadcast_alert itself skips green, expired, and already-sent
+        # alerts, so re-running the backlog is safe.
+        if settings.enable_broadcast:
+            try:
+                summary = await broadcast_alert(alert_id, self.pool)
+                log.info("processor.broadcast", **{k: v for k, v in summary.items() if k != "alert_id"})
+            except Exception as exc:
+                result.errors.append(f"Broadcast: {exc}")
 
         result.total_duration_ms = (time.perf_counter() - start) * 1000
         log.info(
@@ -225,7 +270,7 @@ class AlertProcessor:
             season=season,
             language=language,
         )
-        steps = await self.router.complete(system, user)
+        steps, provider = await self.router.complete_with_provider(system, user)
         if not steps:
             return None
         return ActionCard(
@@ -233,7 +278,29 @@ class AlertProcessor:
             livelihood=livelihood,
             language=language,
             steps=steps,
-            generated_by=ModelProvider.CLAUDE,
+            generated_by=provider,
+        )
+
+    async def translate_on_demand(self, alert_id: UUID, language: str) -> TranslationOutput | None:
+        """Generate and store one alert translation that the backlog has not reached."""
+        alert = await self._fetch_alert(alert_id)
+        if not alert:
+            return None
+
+        countries = list(alert.get("affected_countries") or [])
+        valid_from = alert["valid_from"].strftime("%Y-%m-%d %H:%M UTC") if alert.get("valid_from") else "now"
+        valid_to = alert["valid_to"].strftime("%Y-%m-%d %H:%M UTC") if alert.get("valid_to") else "72 hours from now"
+
+        return await self._translate_one(
+            alert_id=alert_id,
+            hazard_type=alert["hazard_type"],
+            severity=alert["severity"],
+            countries=countries,
+            valid_from=valid_from,
+            valid_to=valid_to,
+            language=language,
+            season=get_season(alert.get("valid_from")),
+            livelihood_hint=get_dominant_livelihood(countries),
         )
 
     async def generate_action_card_on_demand(
@@ -308,14 +375,29 @@ class AlertProcessor:
             current_rank = SEVERITY_RANK.get(current_severity, 0)
             proposed = parsed.get("proposed_severity", current_severity)
             proposed_rank = SEVERITY_RANK.get(proposed, 0)
-            should_upgrade = bool(parsed.get("should_upgrade", False)) and proposed_rank > current_rank
+            confidence = float(parsed.get("confidence", 0.0))
+            # Confidence gate per spec §3.6. It was previously parsed and stored
+            # but never compared, so a low-confidence model guess could raise an
+            # official alert to red — and now trigger a real SMS broadcast.
+            should_upgrade = (
+                bool(parsed.get("should_upgrade", False))
+                and proposed_rank > current_rank
+                and confidence > MIN_UPGRADE_CONFIDENCE
+            )
+            if bool(parsed.get("should_upgrade", False)) and proposed_rank > current_rank and not should_upgrade:
+                logger.info(
+                    "processor.upgrade_below_confidence",
+                    alert_id=str(alert_id),
+                    confidence=confidence,
+                    floor=MIN_UPGRADE_CONFIDENCE,
+                )
 
             return AlertUpgradeSignal(
                 alert_id=alert_id,
                 current_severity=current_severity,
                 proposed_severity=proposed,
                 report_count=len(rows),
-                confidence=float(parsed.get("confidence", 0.0)),
+                confidence=confidence,
                 supporting_descriptions=descriptions[:5],
                 claude_reasoning=parsed.get("reasoning", ""),
                 should_upgrade=should_upgrade,
@@ -323,6 +405,59 @@ class AlertProcessor:
         except Exception as exc:
             logger.warning("processor.upgrade_parse_failed", error=str(exc))
             return None
+
+    async def _regenerate_content(
+        self,
+        *,
+        alert_id: UUID,
+        alert: dict,
+        countries: list[str],
+        season: str,
+        dominant_livelihood: str,
+        valid_from: str,
+        valid_to: str,
+        result: ProcessingResult,
+        log,
+    ) -> None:
+        """Re-run translations and action cards after a severity upgrade."""
+        translations = await asyncio.gather(
+            *[
+                self._translate_one(
+                    alert_id=alert_id,
+                    hazard_type=alert["hazard_type"],
+                    severity=alert["severity"],
+                    countries=countries,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
+                    language=lang,
+                    season=season,
+                    livelihood_hint=dominant_livelihood,
+                )
+                for lang in LANGUAGES
+            ]
+        )
+        regenerated = sum(1 for t in translations if t and not t.error)
+
+        cards = 0
+        for livelihood in LIVELIHOODS:
+            for lang in LANGUAGES:
+                try:
+                    card = await self._generate_action_card(
+                        alert_id=alert_id,
+                        hazard_type=alert["hazard_type"],
+                        severity=alert["severity"],
+                        countries=countries,
+                        livelihood=livelihood,
+                        season=season,
+                        language=lang,
+                    )
+                    if card:
+                        await self._store_action_card(card)
+                        cards += 1
+                except Exception as exc:
+                    result.errors.append(f"Regenerated action card {livelihood}/{lang}: {exc}")
+
+        log.info("processor.content_regenerated", translations=regenerated, action_cards=cards)
 
     # -- DB operations ------------------------------------------------------------
 
@@ -368,12 +503,28 @@ class AlertProcessor:
             )
 
     async def _apply_severity_upgrade(self, alert_id: UUID, upgrade: AlertUpgradeSignal) -> None:
-        async with self.pool.acquire() as conn:
+        """Apply the upgrade and invalidate everything derived from the old severity.
+
+        Translations and action cards state the severity in their text, so they
+        must be regenerated — otherwise an alert upgraded to red keeps telling
+        people, in six languages, that it is orange. Clearing broadcast_at lets
+        the alert be sent again at its new severity, which is the whole point of
+        the escalation.
+        """
+        async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute(
-                "UPDATE alerts SET severity = $1, processed_at = NOW() WHERE id = $2",
+                "UPDATE alerts SET severity = $1, processed_at = NOW(), broadcast_at = NULL WHERE id = $2",
                 upgrade.proposed_severity,
                 alert_id,
             )
+            await conn.execute("DELETE FROM alert_translations WHERE alert_id = $1", alert_id)
+            await conn.execute("DELETE FROM action_cards WHERE alert_id = $1", alert_id)
+
+        logger.info(
+            "processor.upgrade_invalidated_content",
+            alert_id=str(alert_id),
+            new_severity=upgrade.proposed_severity,
+        )
 
     async def classify_report(self, report_id: UUID, description: str, hazard_type: str) -> list[str]:
         """Classify a community report description into labels.
@@ -389,7 +540,17 @@ class AlertProcessor:
 
         try:
             parsed = _parse_json_block(raw)
-            labels = [str(label) for label in parsed.get("labels", [])][:6]
+            # Constrain to the closed vocabulary. Anything the model invents
+            # would otherwise flow into the map legend and the analyse panel.
+            seen: list[str] = []
+            for label in parsed.get("labels", []):
+                normalised = str(label).strip().lower().replace(" ", "_")
+                if normalised in VALID_REPORT_LABELS and normalised not in seen:
+                    seen.append(normalised)
+            rejected = len(parsed.get("labels", [])) - len(seen)
+            if rejected > 0:
+                logger.info("processor.labels_rejected", report_id=str(report_id), rejected=rejected)
+            labels = seen[:6]
         except Exception:
             labels = []
 
@@ -422,10 +583,20 @@ async def process_backlog(pool: asyncpg.Pool) -> dict:
         rows = await conn.fetch(
             """
             SELECT a.id FROM alerts a
-            WHERE NOT EXISTS (
-              SELECT 1 FROM alert_translations t
-              WHERE t.alert_id = a.id AND t.language = 'sw'
-            )
+            WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+              AND (
+                NOT EXISTS (
+                  SELECT 1 FROM alert_translations t
+                  WHERE t.alert_id = a.id AND t.language = 'sw'
+                )
+                -- Also retry alerts whose translations landed but whose action
+                -- cards did not. Checking only translations left such alerts
+                -- permanently without cards, so USSD and SMS fell back to
+                -- generic guidance instead of livelihood-specific steps.
+                OR NOT EXISTS (
+                  SELECT 1 FROM action_cards c WHERE c.alert_id = a.id
+                )
+              )
             ORDER BY
               CASE a.severity WHEN 'red' THEN 0 WHEN 'orange' THEN 1 ELSE 2 END,
               a.created_at DESC

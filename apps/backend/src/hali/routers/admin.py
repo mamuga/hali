@@ -65,6 +65,46 @@ async def process_single_alert(alert_id: UUID):
     return result.model_dump(mode="json")
 
 
+@router.post("/run-hotspot-detection")
+async def run_hotspots():
+    """Run DBSCAN emerging-hotspot detection now instead of waiting for the 30-minute job."""
+    from hali.ai.spatial_clustering import run_hotspot_detection
+    from hali.database import get_pool
+
+    return await run_hotspot_detection(get_pool())
+
+
+@router.get("/subscriber-stats")
+async def subscriber_stats():
+    """Subscription counts by channel, language, livelihood, country and opt-in source."""
+    from hali.database import get_pool
+    from hali.repositories.subscriptions import SubscriptionRepository
+
+    return await SubscriptionRepository(get_pool()).stats()
+
+
+@router.post("/broadcast-alert/{alert_id}")
+async def trigger_broadcast(alert_id: UUID, force: bool = False):
+    """Fan an alert out to matching subscribers.
+
+    `force=true` re-sends an alert that was already broadcast — real messages to
+    real phones, so it is opt-in rather than the default.
+    """
+    from hali.database import get_pool
+    from hali.services.broadcast import broadcast_alert
+
+    return await broadcast_alert(alert_id, get_pool(), force=force)
+
+
+@router.post("/backfill-population")
+async def backfill_population(limit: int = 25):
+    """Fetch WorldPop population exposure for alerts still missing it."""
+    from hali.database import get_pool
+    from hali.services.population import backfill_population_exposure
+
+    return await backfill_population_exposure(get_pool(), limit)
+
+
 @router.get("/ai-stats")
 async def ai_stats():
     """Return AI router request counts per provider."""

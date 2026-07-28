@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -17,10 +18,18 @@ async def list_alerts(lang: Language = "en", lat: float | None = None, lng: floa
 
 
 @router.get("/geojson")
-async def geojson(bbox: str = "21,-12,52,24", severity: str | None = None, hazard: str | None = None, lang: Language = "sw") -> dict:
+async def geojson(
+    bbox: str = "21,-12,52,24",
+    severity: str | None = None,
+    hazard: str | None = None,
+    lang: Language = "sw",
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+) -> dict:
+    """Alert zones for the map. Supplying from_date/to_date enables temporal playback."""
     if db.pool is None:
         return {"type": "FeatureCollection", "features": []}
-    return await AlertService(db.pool).geojson(bbox, lang, severity, hazard)
+    return await AlertService(db.pool).geojson(bbox, lang, severity, hazard, from_date, to_date)
 
 
 @router.get("/{alert_id}/action-card")

@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     # AI model config
     ai_primary_model: str = "claude-sonnet-4-6"
     ai_gemini_model: str = "gemini-2.5-flash"
-    ai_groq_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # llama-4-scout was retired from Groq and 404s; 3.3-70b is the current
+    # general-purpose multilingual model there.
+    ai_groq_model: str = "llama-3.3-70b-versatile"
     ai_ensemble_enabled: bool = True
     ai_min_clarity_score: float = 0.6
 
@@ -56,6 +58,9 @@ class Settings(BaseSettings):
     chirps_ftp_host: str = "ftp.chc.ucsb.edu"
 
     enable_admin_endpoints: bool = True
+    # Outbound SMS/WhatsApp fan-out after an alert finishes AI processing.
+    # Turn off to run the pipeline without messaging real subscribers.
+    enable_broadcast: bool = True
 
     # Admin API key - protects /api/admin/* endpoints.
     # Set ADMIN_API_KEY in Railway env vars to a strong random string.
@@ -77,6 +82,14 @@ class Settings(BaseSettings):
     @property
     def whatsapp_enabled(self) -> bool:
         return bool(self.whatsapp_token and self.whatsapp_phone_number_id)
+
+    @property
+    def sms_enabled(self) -> bool:
+        return bool(self.africastalking_api_key and self.africastalking_username)
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() in {"production", "prod"}
 
     @property
     def ai_enabled(self) -> bool:

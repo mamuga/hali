@@ -9,7 +9,7 @@ from hali.config import settings
 from hali.database import db
 from hali.logging_config import configure_logging
 from hali.middleware import RequestIdMiddleware
-from hali.routers import admin, alerts, health, reports, ussd, whatsapp
+from hali.routers import admin, alerts, health, reports, spatial, subscriptions, ussd, whatsapp
 from hali.scheduler import setup_scheduler
 
 configure_logging()
@@ -48,6 +48,8 @@ async def root() -> dict[str, str]:
 app.include_router(health.router)
 app.include_router(alerts.router)
 app.include_router(reports.router)
+app.include_router(spatial.router)
+app.include_router(subscriptions.router)
 app.include_router(ussd.router)
 app.include_router(admin.router)
 app.include_router(whatsapp.router)

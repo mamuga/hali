@@ -175,6 +175,32 @@ Report descriptions:
 Should this alert be upgraded? Respond with JSON only."""
 
 
+# The closed label vocabulary from spec §3.5. Exported so the classifier can
+# reject anything a model invents outside this set — free-text labels would leak
+# straight into the map's report breakdown and the analyse endpoint.
+VALID_REPORT_LABELS = frozenset(
+    {
+        "flood",
+        "drought",
+        "locust",
+        "cyclone",
+        "health_emergency",
+        "road_blocked",
+        "bridge_damaged",
+        "crop_loss",
+        "livestock_at_risk",
+        "displacement",
+        "shelter_needed",
+        "water_shortage",
+        "food_shortage",
+        "medical_needed",
+        "communication_down",
+        "power_outage",
+        "other",
+    }
+)
+
+
 def report_label_system_prompt() -> str:
     return """You are a disaster response information classifier.
 Label the community report with 2-5 tags from this list:

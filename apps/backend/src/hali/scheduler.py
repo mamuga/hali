@@ -4,6 +4,7 @@ from __future__ import annotations
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from hali.config import settings
 from hali.database import get_pool
@@ -69,6 +70,16 @@ def setup_scheduler() -> AsyncIOScheduler:
     if settings.ai_enabled and "ai-backlog-daily" not in existing_ids:
         scheduler.add_job(_run_ai_backlog, CronTrigger(hour=8, minute=0), id="ai-backlog-daily", replace_existing=True)
 
+    # Community reports arrive continuously, so hotspot detection is the one job
+    # that cannot be daily — an emerging crisis has to surface within the hour.
+    if "hotspot-detection" not in existing_ids:
+        scheduler.add_job(_run_hotspot_detection, IntervalTrigger(minutes=30), id="hotspot-detection", replace_existing=True)
+
+    # Sits between the last ingestion job and the AI backlog so new alerts carry
+    # a population figure by the time their translations are written.
+    if "population-backfill" not in existing_ids:
+        scheduler.add_job(_run_population_backfill, CronTrigger(hour=7, minute=45), id="population-backfill", replace_existing=True)
+
     enabled_sources = [name for _, name, enabled, _, _ in jobs if enabled]
     logger.info("scheduler.configured", enabled_sources=enabled_sources, ai_backlog_scheduled=settings.ai_enabled)
     return scheduler
@@ -101,3 +112,23 @@ async def _run_ai_backlog() -> None:
         logger.info("scheduler.ai_backlog_job_ok", **result)
     except Exception as exc:
         logger.error("scheduler.ai_backlog_job_failed", error=str(exc))
+
+
+async def _run_hotspot_detection() -> None:
+    try:
+        from hali.ai.spatial_clustering import run_hotspot_detection
+
+        result = await run_hotspot_detection(get_pool())
+        logger.info("scheduler.hotspot_job_ok", **result)
+    except Exception as exc:
+        logger.error("scheduler.hotspot_job_failed", error=str(exc))
+
+
+async def _run_population_backfill() -> None:
+    try:
+        from hali.services.population import backfill_population_exposure
+
+        result = await backfill_population_exposure(get_pool())
+        logger.info("scheduler.population_backfill_ok", **result)
+    except Exception as exc:
+        logger.error("scheduler.population_backfill_failed", error=str(exc))

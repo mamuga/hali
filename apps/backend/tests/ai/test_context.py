@@ -1,19 +1,19 @@
 """Test context enricher."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from hali.ai.context import get_dominant_livelihood, get_season
 
 
 def test_april_is_long_rains():
-    assert get_season(datetime(2026, 4, 15, tzinfo=timezone.utc)) == "long_rains"
+    assert get_season(datetime(2026, 4, 15, tzinfo=UTC)) == "long_rains"
 
 
 def test_january_is_dry():
-    assert get_season(datetime(2026, 1, 10, tzinfo=timezone.utc)) == "dry"
+    assert get_season(datetime(2026, 1, 10, tzinfo=UTC)) == "dry"
 
 
 def test_november_is_short_rains():
-    assert get_season(datetime(2026, 11, 5, tzinfo=timezone.utc)) == "short_rains"
+    assert get_season(datetime(2026, 11, 5, tzinfo=UTC)) == "short_rains"
 
 
 def test_somalia_is_pastoralist():

@@ -250,23 +250,36 @@ class AIRouter:
             )
 
         winner = max(valid, key=lambda r: r.clarity_score)
-        logger.info(
-            "router.ensemble_winner",
-            language=language,
-            provider=winner.provider.value,
-            score=round(winner.clarity_score, 3),
-            latency_ms=round(winner.latency_ms, 1),
-        )
+        # AI_MIN_CLARITY_SCORE is a floor, not a preference: an output nobody can
+        # act on is worse than none. It is still returned (a rough translation
+        # beats silence in an emergency) but flagged so it is visible in logs and
+        # stats rather than passing as a clean win.
+        below_floor = winner.clarity_score < settings.ai_min_clarity_score
+        if below_floor:
+            logger.warning(
+                "router.below_clarity_floor",
+                language=language,
+                provider=winner.provider.value,
+                score=round(winner.clarity_score, 3),
+                floor=settings.ai_min_clarity_score,
+            )
+        else:
+            logger.info(
+                "router.ensemble_winner",
+                language=language,
+                provider=winner.provider.value,
+                score=round(winner.clarity_score, 3),
+                latency_ms=round(winner.latency_ms, 1),
+            )
         return winner
 
     async def _fallback_translate(self, system: str, user: str, language: str) -> TranslationOutput:
         """Sequential fallback: Claude -> Gemini -> Groq -> cached."""
-        for call in (
-            self._call_claude(system, user, language),
-            self._call_gemini(system, user, language),
-            self._call_groq(system, user, language),
-        ):
-            result = await call
+        # Built lazily. Creating all three coroutines up front and awaiting them
+        # in a loop left the unused ones un-awaited whenever an earlier provider
+        # succeeded, which raises "coroutine was never awaited" at GC time.
+        for call in (self._call_claude, self._call_gemini, self._call_groq):
+            result = await call(system, user, language)
             if not result.error and result.headline:
                 return result
 
@@ -280,10 +293,16 @@ class AIRouter:
         )
 
     async def complete(self, system_prompt: str, user_prompt: str) -> str:
-        """General-purpose completion (not translation).
+        """General-purpose completion (not translation)."""
+        text, _provider = await self.complete_with_provider(system_prompt, user_prompt)
+        return text
 
-        Used for action cards and severity assessment. Falls back through
-        the chain on error.
+    async def complete_with_provider(self, system_prompt: str, user_prompt: str) -> tuple[str, ModelProvider]:
+        """Like complete(), but also reports which provider actually answered.
+
+        Callers previously had to guess, and action cards were recorded as
+        Claude-generated regardless of which model produced them, which made
+        /api/admin/ai-stats misreport the ensemble.
         """
         for provider, fn in (
             (ModelProvider.CLAUDE, self._call_raw_claude),
@@ -293,10 +312,11 @@ class AIRouter:
             try:
                 result = await fn(system_prompt, user_prompt)
                 if result:
-                    return result
+                    self._request_counts[provider] = self._request_counts.get(provider, 0) + 1
+                    return result, provider
             except Exception as exc:
                 logger.warning("router.complete_failed", provider=provider.value, error=str(exc))
-        return ""
+        return "", ModelProvider.CACHED
 
     async def _call_raw_claude(self, system: str, user: str) -> str:
         client = self._get_claude()
