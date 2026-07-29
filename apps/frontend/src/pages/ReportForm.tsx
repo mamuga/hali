@@ -9,16 +9,8 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { submitReport } from '@/lib/api';
 import { offlineQueue } from '@/lib/offlineQueue';
 import { cn } from '@/lib/utils';
+import { HAZARDS } from '@/lib/hazards';
 import type { CommunityReport, HazardType } from '@hali/types';
-
-const HAZARDS: { value: HazardType; label: string }[] = [
-  { value: 'flood', label: 'Flood' },
-  { value: 'drought', label: 'Drought' },
-  { value: 'locust', label: 'Locust swarm' },
-  { value: 'health', label: 'Health emergency' },
-  { value: 'cyclone', label: 'Cyclone' },
-  { value: 'other', label: 'Other' },
-];
 
 export function ReportForm() {
   const { coords, error: locError, loading: locLoading } = useLocation();
@@ -88,13 +80,15 @@ export function ReportForm() {
               <button
                 key={h.value}
                 onClick={() => setHazard(h.value)}
+                aria-pressed={hazard === h.value}
                 className={cn(
-                  'rounded-lg border px-3.5 py-2 text-sm font-medium transition-all duration-150',
+                  'inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-medium transition-all duration-150',
                   hazard === h.value
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground',
                 )}
               >
+                <h.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {h.label}
               </button>
             ))}

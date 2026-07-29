@@ -14,8 +14,11 @@ import type { Alert, Language, Livelihood } from '@hali/types';
 const LIVELIHOODS: { value: Livelihood; label: string }[] = [
   { value: 'farmer', label: 'Farmer' },
   { value: 'pastoralist', label: 'Pastoralist' },
+  { value: 'agropastoralist', label: 'Agro-pastoralist' },
   { value: 'fisherfolk', label: 'Fisherfolk' },
   { value: 'urban', label: 'Urban resident' },
+  { value: 'trader', label: 'Trader' },
+  { value: 'displaced', label: 'Displaced / camp' },
 ];
 
 export function ActionCardPage() {

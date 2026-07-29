@@ -1,0 +1,25 @@
+{
+  "name": "hali_alert_v1",
+  "language": "sw",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Tahadhari ya HALI: {{1}}\nUzito: {{2}}\n\n{{3}}\n\nHatua ya kwanza: {{4}}\n\nFuata maelekezo ya viongozi wa eneo lako.",
+      "example": {
+        "body_text": [
+          [
+            "Mafuriko",
+            "HATARI KUBWA",
+            "Mafuriko makubwa yanatarajiwa Kaskazini Kenya.",
+            "Hamia mifugo kwenda maeneo ya juu sasa hivi."
+          ]
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Tuma STOP kuacha tahadhari"
+    }
+  ]
+}

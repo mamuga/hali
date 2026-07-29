@@ -7,9 +7,11 @@ import type {
   CommunityReport,
   CommunityReportResponse,
   CompoundRiskGeoJSON,
+  CountriesGeoJSON,
   EmergingHotspotGeoJSON,
   Language,
   Livelihood,
+  PolygonQueryResult,
   SpatialAnalysis,
   SubscriptionCreate,
   SubscriptionResponse,
@@ -59,8 +61,25 @@ export async function fetchCompoundRisk(): Promise<CompoundRiskGeoJSON> {
   return data;
 }
 
+export async function fetchCountriesGeoJSON(): Promise<CountriesGeoJSON> {
+  const { data } = await api.get<CountriesGeoJSON>('/api/spatial/countries/geojson');
+  return data;
+}
+
 export async function fetchEmergingHotspots(): Promise<EmergingHotspotGeoJSON> {
   const { data } = await api.get<EmergingHotspotGeoJSON>('/api/spatial/emerging-hotspots');
+  return data;
+}
+
+export async function queryPolygon(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+  lang: Language = 'en',
+): Promise<PolygonQueryResult> {
+  const { data } = await api.post<PolygonQueryResult>(
+    '/api/spatial/query-polygon',
+    { geometry },
+    { params: { lang } },
+  );
   return data;
 }
 

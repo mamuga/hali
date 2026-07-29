@@ -32,8 +32,8 @@ from fastapi.responses import PlainTextResponse
 
 from hali.database import db
 from hali.repositories.alerts import AlertRepository
-from hali.repositories.reports import ReportRepository
 from hali.repositories.subscriptions import SubscriptionRepository, normalise_phone
+from hali.services.reports import ReportService
 
 logger = structlog.get_logger(__name__)
 
@@ -59,9 +59,42 @@ IGAD_COUNTRIES = [
     ("SD", "Sudan"),
     ("SS", "S.Sudan"),
 ]
-LANGUAGES = [("sw", "Kiswahili"), ("so", "Somali"), ("am", "Amharic"), ("om", "Oromo"), ("ar", "Arabic"), ("en", "English")]
-LIVELIHOODS = [("farmer", "Farmer"), ("pastoralist", "Pastoralist"), ("fisherfolk", "Fisherfolk"), ("urban", "Urban")]
-HAZARDS = [("flood", "Flood"), ("drought", "Drought"), ("locust", "Locust"), ("other", "Other")]
+# Labels stay ASCII: USSD gateways encode in GSM-7, and an accented character
+# silently forces UCS-2, which halves the usable page length. "Francais" rather
+# than "Français" is deliberate. All three menus were measured against
+# USSD_MAX_CHARS with the full option list — see tests/test_ussd_menu_length.py.
+LANGUAGES = [
+    ("sw", "Kiswahili"),
+    ("so", "Somali"),
+    ("am", "Amharic"),
+    ("om", "Oromo"),
+    ("ar", "Arabic"),
+    ("en", "English"),
+    ("fr", "Francais"),
+    ("ti", "Tigrinya"),
+    ("lg", "Luganda"),
+    ("aa", "Afar"),
+]
+LIVELIHOODS = [
+    ("farmer", "Farmer"),
+    ("pastoralist", "Pastoralist"),
+    ("agropastoralist", "Agro-pastoralist"),
+    ("fisherfolk", "Fisherfolk"),
+    ("urban", "Urban"),
+    ("trader", "Trader"),
+    ("displaced", "Displaced"),
+]
+HAZARDS = [
+    ("flood", "Flood"),
+    ("drought", "Drought"),
+    ("locust", "Locust"),
+    ("cyclone", "Cyclone"),
+    ("heatwave", "Heatwave"),
+    ("landslide", "Landslide"),
+    ("wildfire", "Wildfire"),
+    ("epidemic", "Epidemic"),
+    ("other", "Other"),
+]
 
 # Fallback interior points, used only if the countries table is unreachable
 # within the timeout budget. USSD carries no GPS, so a country-level point is
@@ -210,13 +243,14 @@ async def _handle_report(phone: str, parts: list[str]) -> str:
     lat, lng = point
 
     saved = await _guarded(
-        ReportRepository(db.pool).create_from_channel(
+        ReportService(db.pool).create_from_channel(
             hazard_type=hazard_type,
             description=f"{hazard_label} reported via USSD from {country_name}",
             lat=lat,
             lng=lng,
             channel="ussd",
             phone_number=phone,
+            location_precision="country",
         ),
         None,
     )

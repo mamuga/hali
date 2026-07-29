@@ -22,6 +22,9 @@ REPORT_WINDOW_DAYS = 7
 # A cluster whose centroid falls within this distance of an active alert is
 # considered already covered by official warning, so it is not "emerging".
 ALERT_COVERAGE_METRES = 100_000
+# Sources whose alert footprint is a whole country. They cannot answer "is this
+# spot already warned about" — every spot in the country is inside them.
+NATIONAL_SCOPE_SOURCES = ("ifrc", "who")
 # Report count at which confidence saturates at 1.0.
 CONFIDENCE_SATURATION = 10
 
@@ -37,6 +40,12 @@ async def detect_emerging_hotspots(pool: asyncpg.Pool) -> list[dict[str, Any]]:
             SELECT id, ST_Y(location) AS lat, ST_X(location) AS lng, hazard_type, reported_at
             FROM community_reports
             WHERE reported_at > NOW() - make_interval(days => $1)
+              -- GPS only. USSD and WhatsApp reports are stored at a country
+              -- interior point, so N of them from one country are identical
+              -- coordinates — DBSCAN reads that as a dense cluster and invents
+              -- a hotspot in empty terrain. Precision is a property of the
+              -- channel, not evidence of anything happening at that spot.
+              AND location_precision = 'gps'
             """,
             REPORT_WINDOW_DAYS,
         )
@@ -59,11 +68,14 @@ async def detect_emerging_hotspots(pool: asyncpg.Pool) -> list[dict[str, Any]]:
 
     ordered = list(clusters.values())
     centroids = [(_mean(c, "lng"), _mean(c, "lat")) for c in ordered]
+    hazards = [_dominant_hazard(c) for c in ordered]
 
-    covered = await _covered_by_active_alert(pool, centroids)
+    covered = await _covered_by_active_alert(pool, centroids, hazards)
 
     hotspots: list[dict[str, Any]] = []
-    for cluster, (lng, lat), is_covered in zip(ordered, centroids, covered, strict=True):
+    for cluster, (lng, lat), hazard, is_covered in zip(
+        ordered, centroids, hazards, covered, strict=True
+    ):
         if is_covered:
             continue
         report_count = len(cluster)
@@ -73,7 +85,7 @@ async def detect_emerging_hotspots(pool: asyncpg.Pool) -> list[dict[str, Any]]:
                 "geometry": {"type": "Point", "coordinates": [lng, lat]},
                 "properties": {
                     "report_count": report_count,
-                    "dominant_hazard": _dominant_hazard(cluster),
+                    "dominant_hazard": hazard,
                     "confidence": min(report_count / CONFIDENCE_SATURATION, 1.0),
                     "status": "UNCONFIRMED — no official alert",
                     "first_reported": min(r["reported_at"] for r in cluster),
@@ -114,8 +126,27 @@ def _dominant_hazard(cluster: list[asyncpg.Record]) -> str:
     return max(sorted(counts), key=lambda h: counts[h])
 
 
-async def _covered_by_active_alert(pool: asyncpg.Pool, centroids: list[tuple[float, float]]) -> list[bool]:
-    """One batched query for all centroids rather than a query per cluster."""
+async def _covered_by_active_alert(
+    pool: asyncpg.Pool, centroids: list[tuple[float, float]], hazards: list[str]
+) -> list[bool]:
+    """Is this cluster's hazard already covered by an official alert nearby?
+
+    Two conditions narrow this beyond "any alert is nearby", and both matter now
+    that the feed carries 537 active alerts rather than the handful it had when
+    this was written.
+
+    Matching on hazard type. The question a hotspot answers is "are people
+    reporting something nobody has warned about", so a drought polygon must not
+    suppress a cluster of flood reports. Measured on the live feed: hazard-
+    agnostic coverage suppressed 98.3% of sampled IGAD land, which made the
+    whole capability structurally dead — no volume of community reports could
+    ever have produced a hotspot. Matching on hazard drops that to 6.7% for
+    flood, which is the honest figure.
+
+    Excluding country-scoped sources. An IFRC appeal or WHO outbreak notice
+    carries the whole national outline, so every point in the country sits
+    inside one. Letting those count as coverage would re-suppress everything.
+    """
     lngs = [c[0] for c in centroids]
     lats = [c[1] for c in centroids]
     async with pool.acquire() as conn:
@@ -124,18 +155,23 @@ async def _covered_by_active_alert(pool: asyncpg.Pool, centroids: list[tuple[flo
             SELECT EXISTS (
                 SELECT 1 FROM alerts a
                 WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+                  AND a.hazard_type = c.hazard
+                  AND a.source <> ALL($4::text[])
                   AND ST_DWithin(
                       a.geom::geography,
                       ST_SetSRID(ST_MakePoint(c.lng, c.lat), 4326)::geography,
                       $3
                   )
             ) AS covered
-            FROM unnest($1::float8[], $2::float8[]) WITH ORDINALITY AS c(lng, lat, ord)
+            FROM unnest($1::float8[], $2::float8[], $5::text[])
+                 WITH ORDINALITY AS c(lng, lat, hazard, ord)
             ORDER BY c.ord
             """,
             lngs,
             lats,
             ALERT_COVERAGE_METRES,
+            list(NATIONAL_SCOPE_SOURCES),
+            hazards,
         )
     return [row["covered"] for row in rows]
 

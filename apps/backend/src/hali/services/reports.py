@@ -27,6 +27,35 @@ class ReportService:
         self.schedule_classification(UUID(str(created["id"])), report.description, report.hazard_type)
         return created
 
+    async def create_from_channel(
+        self,
+        hazard_type: str,
+        description: str,
+        lat: float,
+        lng: float,
+        channel: str,
+        phone_number: str | None = None,
+        location_precision: str = "country",
+    ) -> dict:
+        """Store a USSD/WhatsApp/SMS report and classify it like any other.
+
+        The routers previously wrote straight to the repository, which meant
+        reports arriving on the channels most of our users actually have were
+        the only ones that never got AI labels — so they were invisible to
+        every label-driven aggregate downstream.
+        """
+        created = await self.repo.create_from_channel(
+            hazard_type=hazard_type,
+            description=description,
+            lat=lat,
+            lng=lng,
+            channel=channel,
+            phone_number=phone_number,
+            location_precision=location_precision,
+        )
+        self.schedule_classification(UUID(str(created["id"])), description, hazard_type)
+        return created
+
     def schedule_classification(self, report_id: UUID, description: str, hazard_type: str) -> None:
         """Classify in the background so the caller still gets an immediate 201."""
         if not get_settings().ai_enabled:

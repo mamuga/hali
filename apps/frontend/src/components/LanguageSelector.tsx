@@ -9,13 +9,19 @@ import {
 import { cn } from '@/lib/utils';
 import type { Language } from '@hali/types';
 
+// Labels are written in each language's own script — someone who reads only
+// Tigrinya cannot find "Tigrinya" in a list of English names.
 const LANGS: { code: Language; label: string; native: string }[] = [
   { code: 'sw', label: 'Kiswahili', native: 'SW' },
   { code: 'so', label: 'Soomaali', native: 'SO' },
-  { code: 'am', label: 'Amharic', native: 'AM' },
-  { code: 'om', label: 'Oromoo', native: 'OM' },
+  { code: 'am', label: 'አማርኛ', native: 'AM' },
+  { code: 'om', label: 'Afaan Oromoo', native: 'OM' },
   { code: 'ar', label: 'العربية', native: 'AR' },
   { code: 'en', label: 'English', native: 'EN' },
+  { code: 'fr', label: 'Français', native: 'FR' },
+  { code: 'ti', label: 'ትግርኛ', native: 'TI' },
+  { code: 'lg', label: 'Luganda', native: 'LG' },
+  { code: 'aa', label: 'Qafar af', native: 'AA' },
 ];
 
 export function LanguageSelector({

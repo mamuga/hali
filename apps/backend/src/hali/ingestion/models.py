@@ -15,6 +15,12 @@ class HazardType(StrEnum):
     DROUGHT = "drought"
     LOCUST = "locust"
     CYCLONE = "cyclone"
+    HEATWAVE = "heatwave"
+    LANDSLIDE = "landslide"
+    WILDFIRE = "wildfire"
+    # Distinct from HEALTH: an outbreak (cholera after a flood) needs different
+    # advice from a general health advisory.
+    EPIDEMIC = "epidemic"
     HEALTH = "health"
     OTHER = "other"
 
@@ -31,6 +37,12 @@ class SourceName(StrEnum):
     GFS = "gfs"
     GLOFAS = "glofas"
     ICPAC = "icpac"
+    # Condition feeds: subnational indicators rather than discrete events.
+    HAPI = "hapi"
+    FEWSNET = "fewsnet"
+    # Named-event feeds for hazards the physical models do not see.
+    IFRC = "ifrc"
+    WHO = "who"
 
 
 class IngestionStatus(StrEnum):

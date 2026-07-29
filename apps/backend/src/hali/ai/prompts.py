@@ -18,6 +18,24 @@ LANGUAGE_NAMES = {
     "om": "Afaan Oromo",
     "ar": "Arabic (العربية)",
     "en": "English",
+    "fr": "French (Français)",
+    "ti": "Tigrinya (ትግርኛ)",
+    "lg": "Luganda",
+    "aa": "Afar (Qafar af)",
+}
+
+# Languages whose training data is thin enough that a fluent-looking output can
+# still be wrong. The router holds these to the clarity floor and falls back to
+# English rather than shipping a confident mistranslation of a life-safety
+# instruction. See ai/router.py.
+LOW_RESOURCE_LANGUAGES = frozenset({"ti", "lg", "aa"})
+
+# Languages that must be written in a non-Latin script. Models drift into
+# transliteration for these, which is unreadable to the intended audience.
+NON_LATIN_SCRIPTS = {
+    "am": "Ethiopic (Ge'ez) script",
+    "ti": "Ethiopic (Ge'ez) script",
+    "ar": "Arabic script",
 }
 
 LIVELIHOOD_CONTEXT = {
@@ -29,6 +47,11 @@ LIVELIHOOD_CONTEXT = {
         "nomadic or semi-nomadic pastoralists who move livestock "
         "(cattle, camels, goats) across grazing lands"
     ),
+    "agropastoralist": (
+        "mixed crop-and-livestock households who farm a small plot and also "
+        "keep livestock, common across the IGAD borderlands; they must choose "
+        "between protecting the harvest and moving the herd"
+    ),
     "fisherfolk": (
         "fishing communities on lakes, rivers, or coastal areas "
         "who depend on daily fishing for food and income"
@@ -37,6 +60,16 @@ LIVELIHOOD_CONTEXT = {
         "urban residents in informal settlements near rivers "
         "or low-lying flood-prone areas"
     ),
+    "trader": (
+        "market vendors, shopkeepers, and transporters whose income depends on "
+        "roads and markets staying open, and who hold perishable stock they "
+        "can lose in a day"
+    ),
+    "displaced": (
+        "people living in displacement camps or informal settlements, "
+        "dependent on aid distribution, without land or livestock, with "
+        "limited freedom of movement and no property to secure"
+    ),
 }
 
 SEASON_CONTEXT = {
@@ -44,6 +77,18 @@ SEASON_CONTEXT = {
     "short_rains": "This is the short rains season (October-December). Rivers are rising.",
     "dry": "This is the dry season. Flash floods from upstream are unexpected but possible.",
 }
+
+
+def script_requirement(language_code: str) -> str:
+    """A one-line instruction pinning the writing system, or '' for Latin scripts."""
+    script = NON_LATIN_SCRIPTS.get(language_code)
+    if not script:
+        return ""
+    name = LANGUAGE_NAMES.get(language_code, language_code)
+    return (
+        f"Write in {script}. Do NOT transliterate into Latin letters — "
+        f"a {name} reader cannot read transliterated text."
+    )
 
 
 def translation_system_prompt() -> str:
@@ -77,8 +122,10 @@ def translation_user_prompt(
         f"Primary audience: {LIVELIHOOD_CONTEXT.get(livelihood_hint, '')}."
         if livelihood_hint else ""
     )
+    script_note = script_requirement(language_code)
 
     return f"""Translate this early warning alert into {lang_name}.
+{script_note}
 
 ALERT DETAILS:
   Hazard: {hazard_type}
@@ -129,10 +176,10 @@ ALERT:
 
 AUDIENCE: {livelihood_desc}
 
-LANGUAGE: Write your response entirely in {lang_name}. If writing in a
-non-Latin script language (Amharic, Arabic), use the correct script. If
-writing in a Latin-script African language (Swahili, Somali, Oromo), use
-that language's vocabulary - do NOT translate to English.
+LANGUAGE: Write your response entirely in {lang_name}.
+{script_requirement(language)}
+If writing in a Latin-script African language (Swahili, Somali, Oromo,
+Luganda, Afar), use that language's vocabulary - do NOT translate to English.
 
 What are the 4 most important things this community should do in the next 48 hours?
 Write for people who may be illiterate - steps must be simple enough to be read aloud

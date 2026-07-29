@@ -4,10 +4,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-HazardType = Literal["flood", "drought", "locust", "cyclone", "health", "other"]
+HazardType = Literal[
+    "flood", "drought", "locust", "cyclone", "heatwave",
+    "landslide", "wildfire", "epidemic", "health", "other",
+]
 Severity = Literal["green", "orange", "red"]
-Language = Literal["sw", "so", "am", "om", "ar", "en"]
-Livelihood = Literal["farmer", "pastoralist", "fisherfolk", "urban"]
+Language = Literal["sw", "so", "am", "om", "ar", "en", "fr", "ti", "lg", "aa"]
+Livelihood = Literal[
+    "farmer", "pastoralist", "agropastoralist", "fisherfolk",
+    "urban", "trader", "displaced",
+]
 
 
 class Alert(BaseModel):

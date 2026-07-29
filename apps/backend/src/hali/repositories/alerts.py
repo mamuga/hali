@@ -5,6 +5,11 @@ from uuid import UUID
 
 import asyncpg
 
+# ~500 m at the equator. Chosen by measuring the live feed: it cuts the map
+# payload by 10x while leaving district outlines visually identical at the zoom
+# levels the map permits.
+MAP_GEOMETRY_TOLERANCE = 0.005
+
 
 class AlertRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
@@ -39,7 +44,15 @@ class AlertRepository:
         hazard: str | None,
         from_date: datetime | None = None,
         to_date: datetime | None = None,
+        tolerance: float = MAP_GEOMETRY_TOLERANCE,
     ) -> dict[str, Any]:
+        # Geometry is simplified for the map. FEWS NET district polygons are
+        # unions of livelihood-zone slivers, so the raw feed for 537 alerts is
+        # 331k vertices and 8.9 MB — 28 seconds on a good connection and hopeless
+        # on the 2G this app targets. At ~500 m tolerance it is 0.92 MB, and the
+        # difference is invisible below the zoom this map allows. Analysis
+        # endpoints keep full precision.
+        #
         # With no date range this serves the live map, so expired alerts are
         # excluded. With a range it serves temporal playback, where past alerts
         # are exactly what is being asked for — hence the CASE rather than an
@@ -49,7 +62,7 @@ class AlertRepository:
           'type', 'FeatureCollection',
           'features', COALESCE(jsonb_agg(jsonb_build_object(
             'type', 'Feature',
-            'geometry', ST_AsGeoJSON(a.geom)::jsonb,
+            'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(a.geom, $10))::jsonb,
             'properties', jsonb_build_object(
               'id', a.id::text,
               'hazard_type', a.hazard_type,
@@ -59,7 +72,14 @@ class AlertRepository:
               'affected_countries', a.affected_countries,
               'population_exposed', a.population_exposed,
               'valid_from', a.valid_from,
-              'valid_to', a.valid_to
+              'valid_to', a.valid_to,
+              'source', a.source,
+              -- Country-scoped advisories (IFRC appeals, WHO outbreak notices)
+              -- carry the whole national outline. Rendered in the same layer as
+              -- district hazard footprints they paint over them entirely, which
+              -- is the opposite of what a subnational map is for, so the client
+              -- separates them.
+              'scope', CASE WHEN a.source IN ('ifrc', 'who') THEN 'national' ELSE 'local' END
             )
           )), '[]'::jsonb)
         ) AS geojson
@@ -77,7 +97,9 @@ class AlertRepository:
               END
         """
         async with self.pool.acquire() as conn:
-            value = await conn.fetchval(sql, *bbox, lang, severity, hazard, from_date, to_date)
+            value = await conn.fetchval(
+                sql, *bbox, lang, severity, hazard, from_date, to_date, tolerance
+            )
         return json.loads(value) if isinstance(value, str) else value
 
     async def latest_for_country(self, iso2: str | None, lang: str) -> dict[str, Any] | None:

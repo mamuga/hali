@@ -29,19 +29,25 @@ class ReportRepository:
         lng: float,
         channel: str,
         phone_number: str | None = None,
+        location_precision: str = "country",
     ) -> dict[str, Any]:
         """Insert a report arriving from USSD or WhatsApp.
 
         Those channels carry no GPS, so the caller resolves a country-level
-        point before calling this.
+        point before calling this. `location_precision` records that, which is
+        what keeps a country interior point out of the hotspot clustering.
         """
         sql = """
-        INSERT INTO community_reports (hazard_type, description, location, channel, phone_number)
-        VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6)
-        RETURNING id, hazard_type, description, ST_Y(location) AS lat, ST_X(location) AS lng, labels, channel, reported_at
+        INSERT INTO community_reports
+            (hazard_type, description, location, channel, phone_number, location_precision)
+        VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6, $7)
+        RETURNING id, hazard_type, description, ST_Y(location) AS lat, ST_X(location) AS lng,
+                  labels, channel, location_precision, reported_at
         """
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(sql, hazard_type, description, lng, lat, channel, phone_number)
+            row = await conn.fetchrow(
+                sql, hazard_type, description, lng, lat, channel, phone_number, location_precision
+            )
         return dict(row)
 
     async def update_labels(self, report_id: UUID, labels: list[str]) -> None:
@@ -71,6 +77,11 @@ class ReportRepository:
         )
         FROM community_reports
         WHERE reported_at >= NOW() - make_interval(days => $1)
+          -- Country-precision reports (USSD/WhatsApp) sit on a country interior
+          -- point. Rendering them would paint a hot blob in the middle of a
+          -- country where nobody actually reported anything. They still count
+          -- in aggregates and severity escalation, just not on a density map.
+          AND location_precision = 'gps'
         """
         async with self.pool.acquire() as conn:
             value = await conn.fetchval(sql, days)

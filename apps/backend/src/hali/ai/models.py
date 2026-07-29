@@ -38,6 +38,10 @@ class TranslationOutput(BaseModel):
     clarity_score: float = 0.0
     latency_ms: float = 0.0
     error: str | None = None
+    # Set when the text is not actually in `language`: a low-resource
+    # translation scored below the clarity floor and English was served in its
+    # place. None means the content genuinely is in the requested language.
+    fallback_language: str | None = None
 
 
 class EnsembleResult(BaseModel):

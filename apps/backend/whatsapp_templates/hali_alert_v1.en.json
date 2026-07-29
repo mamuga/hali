@@ -1,0 +1,25 @@
+{
+  "name": "hali_alert_v1",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "HALI alert: {{1}}\nSeverity: {{2}}\n\n{{3}}\n\nFirst action: {{4}}\n\nFollow guidance from your local authorities.",
+      "example": {
+        "body_text": [
+          [
+            "Flood",
+            "RED",
+            "Severe flooding expected across northern Kenya.",
+            "Move livestock to higher ground now."
+          ]
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Reply STOP to unsubscribe"
+    }
+  ]
+}

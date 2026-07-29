@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # WhatsApp Cloud API (Meta)
     whatsapp_token: str = ""  # permanent system user access token
     whatsapp_phone_number_id: str = ""
+    # WABA ID — distinct from the phone number ID; needed for the
+    # Message Templates API, which is scoped to the business account.
+    whatsapp_business_account_id: str = ""
     whatsapp_verify_token: str = "hali_webhook_2026"
     whatsapp_app_secret: str = ""  # Meta App Secret, used to verify X-Hub-Signature-256
     whatsapp_api_version: str = "v21.0"
@@ -50,6 +53,15 @@ class Settings(BaseSettings):
     enable_gfs: bool = False
     enable_glofas: bool = False
     enable_icpac: bool = False
+    # One-shot/quarterly static load, not part of the scheduled pipeline.
+    enable_worldpop: bool = False
+    enable_hapi: bool = True
+    enable_fewsnet: bool = True
+    enable_ifrc: bool = True
+    enable_who: bool = True
+    # HAPI's app identifier is base64("app:email") — self-service, no approval.
+    hapi_email: str = "hali@example.org"
+    hapi_app_identifier: str = ""
 
     gdacs_url: str = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH"
     glofas_cds_api_key: str = ""

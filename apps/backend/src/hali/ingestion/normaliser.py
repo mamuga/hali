@@ -16,8 +16,8 @@ GDACS_HAZARD_MAP: dict[str, HazardType] = {
     "TC": HazardType.CYCLONE,
     "EQ": HazardType.OTHER,
     "VO": HazardType.OTHER,
-    "WF": HazardType.OTHER,
-    "LS": HazardType.OTHER,
+    "WF": HazardType.WILDFIRE,
+    "LS": HazardType.LANDSLIDE,
 }
 
 GDACS_SEVERITY_MAP: dict[str, Severity] = {

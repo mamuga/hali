@@ -52,15 +52,72 @@ ACTION_VERBS: dict[str, set[str]] = {
         "انتقل", "اذهب", "تجنب", "احتم", "استعد", "غادر", "ابتعد", "خذ", "احم",
         "انتقلوا", "اتركوا",
     },
+    "fr": {
+        "déplacez", "évacuez", "évitez", "abritez", "préparez", "partez",
+        "allez", "prenez", "protégez", "contactez", "restez", "vérifiez",
+        "quittez", "éloignez",
+    },
+    # Tigrinya shares the Ge'ez script with Amharic but not its vocabulary.
+    "ti": {
+        "ውጹ", "ኪዱ", "ተጠንቀቑ", "ኣወግዱ", "ሓልዉ", "ኣዳልዉ", "ውሰዱ", "ተንቀሳቐሱ", "ረሓቑ",
+    },
+    "lg": {
+        "genda", "vaayo", "ddukira", "yewale", "kuuma", "teekateeka", "twala",
+        "sigala", "kebera", "wummula", "dduka",
+    },
+    "aa": {
+        "gexa", "awqa", "cata", "dacrisa", "orbisa", "beya", "raaqa", "gaba",
+    },
 }
 
 HAZARD_KEYWORDS: dict[str, set[str]] = {
-    "en": {"flood", "drought", "cyclone", "locust", "health", "flash", "river", "rain", "wind", "wave", "water"},
-    "sw": {"mafuriko", "ukame", "kimbunga", "nzige", "afya", "mto", "mvua", "upepo", "wimbi", "maji"},
-    "so": {"daad", "fatahaad", "abaar", "duufaan", "ayax", "caafimaad", "webi", "roob", "biyo"},
-    "om": {"lolaa", "goggiinsa", "bubbee", "hawwaannisa", "fayyaa", "laga", "roobа", "bishaan", "rooba"},
-    "am": {"ጎርፍ", "ድርቅ", "አውሎ", "አንበጣ", "ጤና", "ወንዝ", "ዝናብ", "ውሃ", "ነፋስ"},
-    "ar": {"فيضان", "جفاف", "إعصار", "جراد", "صحة", "نهر", "مطر", "مياه", "رياح", "موجة"},
+    "en": {
+        "flood", "drought", "cyclone", "locust", "health", "flash", "river",
+        "rain", "wind", "wave", "water",
+        "heat", "heatwave", "landslide", "mudslide", "wildfire", "fire",
+        "epidemic", "cholera", "outbreak",
+    },
+    "sw": {
+        "mafuriko", "ukame", "kimbunga", "nzige", "afya", "mto", "mvua",
+        "upepo", "wimbi", "maji",
+        "joto", "maporomoko", "moto", "kipindupindu", "mlipuko", "ugonjwa",
+    },
+    "so": {
+        "daad", "fatahaad", "abaar", "duufaan", "ayax", "caafimaad", "webi",
+        "roob", "biyo",
+        "kulayl", "dhul-gooyo", "dab", "daacuun", "faafid",
+    },
+    "om": {
+        "lolaa", "goggiinsa", "bubbee", "hawwaannisa", "fayyaa", "laga",
+        "bishaan", "rooba",
+        "ho'a", "lafa", "ibidda", "kolaraa", "dhibee",
+    },
+    "am": {
+        "ጎርፍ", "ድርቅ", "አውሎ", "አንበጣ", "ጤና", "ወንዝ", "ዝናብ", "ውሃ", "ነፋስ",
+        "ሙቀት", "የመሬት", "እሳት", "ኮሌራ", "ወረርሽኝ",
+    },
+    "ar": {
+        "فيضان", "جفاف", "إعصار", "جراد", "صحة", "نهر", "مطر", "مياه", "رياح", "موجة",
+        "حر", "انهيار", "حريق", "كوليرا", "وباء",
+    },
+    "fr": {
+        "inondation", "sécheresse", "cyclone", "criquet", "santé", "rivière",
+        "pluie", "vent", "eau",
+        "chaleur", "canicule", "glissement", "incendie", "choléra", "épidémie",
+    },
+    "ti": {
+        "ውሕጅ", "ድርቂ", "ህቦብላ", "ኣንበጣ", "ጥዕና", "ሩባ", "ዝናብ", "ማይ",
+        "ሙቐት", "መሬት", "ሓዊ", "ኮለራ", "ለበዳ",
+    },
+    "lg": {
+        "amataba", "ekyeya", "kibuyaga", "enzige", "obulamu", "omugga",
+        "enkuba", "amazzi",
+        "ebbugumu", "ettaka", "omuliro", "kolera", "kawumpuli",
+    },
+    "aa": {
+        "lee", "gilal", "caacisa", "ayro", "wagar", "weeqa", "roob",
+        "urus", "baaxo", "gira", "koleera",
+    },
 }
 
 

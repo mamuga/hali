@@ -63,6 +63,18 @@ export default defineConfig({
             },
           },
           {
+            // Country boundaries are static reference data — they must not
+            // expire on the 5-minute cycle the live spatial feeds use, or the
+            // map loses its outlines and mask the moment the device is offline.
+            // Must precede the general /api/spatial/ rule.
+            urlPattern: /\/api\/spatial\/countries\/geojson/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hali-boundaries',
+              expiration: { maxEntries: 4, maxAgeSeconds: 2592000 },
+            },
+          },
+          {
             urlPattern: /\/api\/spatial\//,
             handler: 'StaleWhileRevalidate',
             options: {
@@ -87,6 +99,27 @@ export default defineConfig({
             options: {
               cacheName: 'osm-tiles',
               expiration: { maxEntries: 1000, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Esri satellite and shaded-relief basemaps. Without this the two
+            // Esri layers are online-only, so switching to Satellite in the
+            // field — exactly when imagery is most useful — shows blank tiles.
+            urlPattern: /^https:\/\/server\.arcgisonline\.com\/ArcGIS\/rest\/services\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'esri-tiles',
+              expiration: { maxEntries: 600, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/[a-c]\.tile\.opentopomap\.org\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'opentopo-tiles',
+              expiration: { maxEntries: 400, maxAgeSeconds: 604800 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

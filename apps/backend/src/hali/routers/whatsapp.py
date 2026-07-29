@@ -12,8 +12,9 @@ Message flow:
 Menu (text-based, no USSD character limits):
   "alerts"    -> latest active alert for East Africa
   "help"      -> what HALI can do
-  "report X"  -> acknowledge a hazard report (same as USSD: acknowledgement only,
-                 no DB write, since a text message carries no coordinates)
+  "report X"  -> store a hazard report. A text message carries no coordinates,
+                 so the location falls back subscriber point -> chosen country
+                 -> dialling-code country, tagged with its precision.
   anything else -> gentle prompt
 """
 
@@ -31,9 +32,9 @@ from fastapi.responses import PlainTextResponse
 from hali.config import settings
 from hali.database import db
 from hali.repositories.alerts import AlertRepository
-from hali.repositories.reports import ReportRepository
 from hali.repositories.subscriptions import SubscriptionRepository
 from hali.services.alerts import AlertService
+from hali.services.reports import ReportService
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,10 @@ router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 GRAPH_API_BASE = "https://graph.facebook.com"
 # Meta-approved template used for proactive (outside 24h window) alert messages.
 ALERT_TEMPLATE_NAME = "hali_alert_v1"
+SEVERITY_UPGRADE_TEMPLATE_NAME = "hali_severity_upgrade_v1"
+# Localisations submitted to Meta; see apps/backend/whatsapp_templates/.
+TEMPLATE_LANGUAGES = frozenset({"sw", "en"})
+TEMPLATE_FALLBACK_LANGUAGE = "en"
 
 IGAD_COUNTRIES = [
     ("KE", "Kenya"),
@@ -244,35 +249,65 @@ async def _save_report(from_number: str, description: str) -> str:
     if db.pool is None:
         return "Samahani, ripoti haikuhifadhiwa. Jaribu tena baadaye."
 
-    # A WhatsApp text carries no coordinates, so the report is placed at the
-    # subscriber's chosen country. Unsubscribed senders have no location at all,
-    # and a report without a location cannot be stored.
+    # A WhatsApp text carries no coordinates. Location is resolved in order of
+    # decreasing accuracy: the subscriber's own point, their chosen country,
+    # then the country implied by their dialling code. Requiring a subscription
+    # first silently discarded every report from a non-subscriber — the exact
+    # people most likely to message during a disaster.
     subscriber = await SubscriptionRepository(db.pool).get(from_number)
-    iso2 = (subscriber or {}).get("preferred_iso2")
     lat, lng = (subscriber or {}).get("lat"), (subscriber or {}).get("lng")
+    precision = "gps"
 
     if lat is None or lng is None:
+        iso2 = (subscriber or {}).get("preferred_iso2") or _iso2_from_phone(from_number)
         if not iso2:
             return "Ili kuhifadhi ripoti yako, tuambie eneo lako kwanza. Andika *subscribe*."
         point = await AlertRepository(db.pool).country_point(iso2)
         if point is None:
             return "Samahani, ripoti haikuhifadhiwa. Jaribu tena baadaye."
         lat, lng = point
+        precision = "country"
 
     try:
-        await ReportRepository(db.pool).create_from_channel(
+        await ReportService(db.pool).create_from_channel(
             hazard_type=_guess_hazard(description),
             description=description[:1000],
             lat=lat,
             lng=lng,
             channel="whatsapp",
             phone_number=from_number,
+            location_precision=precision,
         )
     except Exception as exc:
         logger.error(f"WhatsApp report save failed: {exc}")
         return "Samahani, ripoti haikuhifadhiwa. Jaribu tena baadaye."
 
     return "✅ *Ripoti yako imepokelewa. Asante!*\n\nWataalamu wataichunguza na kuchukua hatua zinazohitajika."
+
+
+# Dialling codes for the IGAD member states. WhatsApp always gives us the
+# sender's full international number, so for a non-subscriber this is the only
+# location signal available — country-level, but far better than dropping the
+# report. Longest prefix first so 211 (SS) is not shadowed by 21.
+PHONE_PREFIX_TO_ISO2 = {
+    "254": "KE",
+    "251": "ET",
+    "252": "SO",
+    "256": "UG",
+    "253": "DJ",
+    "291": "ER",
+    "249": "SD",
+    "211": "SS",
+}
+
+
+def _iso2_from_phone(from_number: str) -> str | None:
+    """Map an E.164 number to an IGAD country by dialling code."""
+    digits = (from_number or "").lstrip("+")
+    for prefix, iso2 in sorted(PHONE_PREFIX_TO_ISO2.items(), key=lambda kv: -len(kv[0])):
+        if digits.startswith(prefix):
+            return iso2
+    return None
 
 
 def _guess_hazard(description: str) -> str:
@@ -339,17 +374,24 @@ async def _send_whatsapp_message(to: str, text: str) -> bool:
     return await _post_message(url, headers, payload, to)
 
 
-async def send_alert_template(to: str, alert, headline: str, first_step: str, language: str) -> bool:
-    """Send a proactive alert using the Meta-approved template.
+async def send_whatsapp_template(
+    to: str,
+    template_name: str,
+    language: str,
+    body_params: list[str],
+) -> bool:
+    """Send an approved template message. Returns True on success.
 
-    Free-form text only reaches a user inside the 24-hour customer service
-    window. A broadcast is unsolicited, so it has to go through an approved
-    template or Meta drops it.
+    Falls back to the English localisation when the subscriber's language has
+    no approved template: subscribers may choose any of sw/so/am/om/ar/en, but
+    only sw and en are submitted for approval, and Meta drops a send whose
+    language code has no matching template.
     """
     if not settings.whatsapp_enabled:
-        logger.warning("WhatsApp not configured — alert template not sent")
+        logger.warning("WhatsApp not configured — template not sent")
         return False
 
+    code = language if language in TEMPLATE_LANGUAGES else TEMPLATE_FALLBACK_LANGUAGE
     url = f"{GRAPH_API_BASE}/{settings.whatsapp_api_version}/{settings.whatsapp_phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {settings.whatsapp_token}",
@@ -360,22 +402,59 @@ async def send_alert_template(to: str, alert, headline: str, first_step: str, la
         "to": to,
         "type": "template",
         "template": {
-            "name": ALERT_TEMPLATE_NAME,
-            "language": {"code": language},
+            "name": template_name,
+            "language": {"code": code},
             "components": [
                 {
                     "type": "body",
-                    "parameters": [
-                        {"type": "text", "text": alert["hazard_type"]},
-                        {"type": "text", "text": alert["severity"].upper()},
-                        {"type": "text", "text": headline},
-                        {"type": "text", "text": first_step or "Follow local guidance."},
-                    ],
+                    "parameters": [{"type": "text", "text": p} for p in body_params],
                 }
             ],
         },
     }
     return await _post_message(url, headers, payload, to)
+
+
+async def send_alert_template(to: str, alert, headline: str, first_step: str, language: str) -> bool:
+    """Send a proactive alert using the Meta-approved template.
+
+    Free-form text only reaches a user inside the 24-hour customer service
+    window. A broadcast is unsolicited, so it has to go through an approved
+    template or Meta drops it.
+    """
+    return await send_whatsapp_template(
+        to,
+        ALERT_TEMPLATE_NAME,
+        language,
+        [
+            alert["hazard_type"],
+            alert["severity"].upper(),
+            headline,
+            first_step or "Follow local guidance.",
+        ],
+    )
+
+
+async def send_severity_upgrade_template(
+    to: str,
+    headline: str,
+    new_severity: str,
+    report_count: int,
+    first_step: str,
+    language: str,
+) -> bool:
+    """Notify a subscriber that community reports escalated an alert's severity."""
+    return await send_whatsapp_template(
+        to,
+        SEVERITY_UPGRADE_TEMPLATE_NAME,
+        language,
+        [
+            headline,
+            new_severity.upper(),
+            str(report_count),
+            first_step or "Follow local guidance.",
+        ],
+    )
 
 
 async def _post_message(url: str, headers: dict, payload: dict, to: str) -> bool:

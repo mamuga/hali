@@ -33,6 +33,7 @@ from .models import (
     TranslationOutput,
 )
 from .prompts import (
+    LOW_RESOURCE_LANGUAGES,
     VALID_REPORT_LABELS,
     action_card_system_prompt,
     action_card_user_prompt,
@@ -47,8 +48,30 @@ from .router import AIRouter
 
 logger = structlog.get_logger(__name__)
 
-LANGUAGES = ["sw", "so", "am", "om", "ar", "en"]
-LIVELIHOODS = ["farmer", "pastoralist", "fisherfolk", "urban"]
+# Every language we can serve. Translations are pre-generated for all of them:
+# an alert nobody can read is worthless, and the alert table stores no headline
+# of its own, so 'en' is generated like any other — it is also the fallback
+# target when a low-resource translation fails the clarity floor.
+LANGUAGES = ["sw", "so", "am", "om", "ar", "en", "fr", "ti", "lg", "aa"]
+
+# Every livelihood an action card can be requested for.
+LIVELIHOODS = [
+    "farmer",
+    "pastoralist",
+    "agropastoralist",
+    "fisherfolk",
+    "urban",
+    "trader",
+    "displaced",
+]
+
+# Action cards are the expensive axis: pre-generating the full matrix would be
+# 7 livelihoods x 10 languages = 70 model calls per alert, which no free-tier
+# quota survives. Pre-generate the combinations a first-time visitor is most
+# likely to hit and serve the remaining 58 on demand — the endpoint already
+# generates and caches a missing card on request.
+PREGENERATED_CARD_LIVELIHOODS = ["farmer", "pastoralist", "fisherfolk", "urban"]
+PREGENERATED_CARD_LANGUAGES = ["sw", "en", "fr"]
 
 SEVERITY_RANK = {"green": 0, "orange": 1, "red": 2}
 
@@ -159,7 +182,13 @@ class AlertProcessor:
                 except Exception as exc:
                     result.errors.append(f"Action card {livelihood}/{lang}: {exc}")
 
-        await asyncio.gather(*(build_card(lv, lang) for lv in LIVELIHOODS for lang in LANGUAGES))
+        await asyncio.gather(
+            *(
+                build_card(lv, lang)
+                for lv in PREGENERATED_CARD_LIVELIHOODS
+                for lang in PREGENERATED_CARD_LANGUAGES
+            )
+        )
 
         log.info("processor.action_cards_done", completed=result.action_cards_completed)
 
@@ -244,12 +273,76 @@ class AlertProcessor:
                 livelihood_hint=livelihood_hint,
             )
             output = await self.router.translate(system, user, language)
+            output = await self._english_fallback_if_unusable(
+                output,
+                hazard_type=hazard_type,
+                severity=severity,
+                countries=countries,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                season=season,
+                livelihood_hint=livelihood_hint,
+            )
             if output.headline:
                 await self._store_translation(alert_id, output)
             return output
         except Exception as exc:
             logger.error("processor.translate_error", language=language, error=str(exc))
             return None
+
+    async def _english_fallback_if_unusable(
+        self,
+        output: TranslationOutput,
+        *,
+        hazard_type: str,
+        severity: str,
+        countries: list[str],
+        valid_from: str,
+        valid_to: str,
+        season: str | None,
+        livelihood_hint: str | None,
+    ) -> TranslationOutput:
+        """Serve English when a low-resource translation is below the clarity floor.
+
+        Tigrinya, Luganda and Afar have thin training data, and a fluent-looking
+        but wrong instruction is more dangerous here than an English one the
+        reader may have to ask someone to interpret. The row keeps the requested
+        language so lookups still hit, with `fallback_language` recording that
+        the text is not in it.
+        """
+        language = output.language
+        if language not in LOW_RESOURCE_LANGUAGES or language == "en":
+            return output
+
+        usable = bool(output.headline) and output.clarity_score >= settings.ai_min_clarity_score
+        if usable:
+            return output
+
+        logger.warning(
+            "processor.low_resource_fallback",
+            language=language,
+            score=round(output.clarity_score, 3),
+            floor=settings.ai_min_clarity_score,
+        )
+        english = await self.router.translate(
+            translation_system_prompt(),
+            translation_user_prompt(
+                hazard_type=hazard_type,
+                severity=severity,
+                countries=countries,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                language_code="en",
+                season=season,
+                livelihood_hint=livelihood_hint,
+            ),
+            "en",
+        )
+        if not english.headline:
+            # English failed too — the original is still better than nothing.
+            return output
+
+        return english.model_copy(update={"language": language, "fallback_language": "en"})
 
     async def _generate_action_card(
         self,
@@ -354,9 +447,22 @@ class AlertProcessor:
             )
 
         if len(rows) < settings.ground_truth_upgrade_threshold:
+            logger.debug(
+                "processor.upgrade_below_threshold",
+                alert_id=str(alert_id),
+                reports=len(rows),
+                threshold=settings.ground_truth_upgrade_threshold,
+            )
             return None
 
         descriptions = [r["description"] for r in rows if r["description"]]
+
+        logger.info(
+            "processor.upgrade_assessment_started",
+            alert_id=str(alert_id),
+            reports=len(rows),
+            current_severity=current_severity,
+        )
 
         system = severity_assessment_system_prompt()
         user = severity_assessment_user_prompt(
@@ -368,6 +474,16 @@ class AlertProcessor:
 
         raw = await self.router.complete(system, user)
         if not raw:
+            # Distinguishable from "the model considered it and said no". Without
+            # this, an exhausted provider quota and a genuine no-upgrade verdict
+            # both surfaced as upgrade_signal: null with nothing in the log, so a
+            # silently dead escalation path looked exactly like a working one.
+            logger.warning(
+                "processor.upgrade_assessment_unavailable",
+                alert_id=str(alert_id),
+                reports=len(rows),
+                reason="all AI providers failed",
+            )
             return None
 
         try:
@@ -439,8 +555,8 @@ class AlertProcessor:
         regenerated = sum(1 for t in translations if t and not t.error)
 
         cards = 0
-        for livelihood in LIVELIHOODS:
-            for lang in LANGUAGES:
+        for livelihood in PREGENERATED_CARD_LIVELIHOODS:
+            for lang in PREGENERATED_CARD_LANGUAGES:
                 try:
                     card = await self._generate_action_card(
                         alert_id=alert_id,
@@ -476,15 +592,18 @@ class AlertProcessor:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO alert_translations (alert_id, language, headline, body)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO alert_translations (alert_id, language, headline, body, fallback_language)
+                VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (alert_id, language) DO UPDATE
-                  SET headline = EXCLUDED.headline, body = EXCLUDED.body
+                  SET headline = EXCLUDED.headline,
+                      body = EXCLUDED.body,
+                      fallback_language = EXCLUDED.fallback_language
                 """,
                 alert_id,
                 output.language,
                 output.headline[:240],
                 output.body[:1200],
+                output.fallback_language,
             )
 
     async def _store_action_card(self, card: ActionCard) -> None:

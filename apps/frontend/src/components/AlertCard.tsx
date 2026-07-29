@@ -1,17 +1,9 @@
-import { AlertTriangle, Bug, ChevronRight, HeartPulse, Sun, Waves, Wind } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { hazardIcon } from '@/lib/hazards';
 import { SeverityBadge } from './SeverityBadge';
 import type { Alert } from '@hali/types';
-
-const HAZARD_ICON = {
-  flood: Waves,
-  drought: Sun,
-  locust: Bug,
-  cyclone: Wind,
-  health: HeartPulse,
-  other: AlertTriangle,
-} as const;
 
 const SEVERITY_BORDER: Record<string, string> = {
   red: 'border-l-red-500',
@@ -26,7 +18,7 @@ interface Props {
 }
 
 export function AlertCard({ alert, onClick, className }: Props) {
-  const Icon = HAZARD_ICON[alert.hazard_type] ?? AlertTriangle;
+  const Icon = hazardIcon(alert.hazard_type);
   const headline = alert.headline ?? `${alert.hazard_type} alert`;
 
   return (

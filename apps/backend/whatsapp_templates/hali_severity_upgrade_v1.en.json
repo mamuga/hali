@@ -1,0 +1,25 @@
+{
+  "name": "hali_severity_upgrade_v1",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Alert upgraded: {{1}} is now {{2}}.\nReason: {{3}} reports from your community.\n\nFirst action: {{4}}\n\nFollow guidance from your local authorities.",
+      "example": {
+        "body_text": [
+          [
+            "Flooding in northern Kenya",
+            "RED",
+            "8",
+            "Move livestock to higher ground now."
+          ]
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "HALI - early warning alerts"
+    }
+  ]
+}

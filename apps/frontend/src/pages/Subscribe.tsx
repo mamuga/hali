@@ -20,18 +20,25 @@ const COUNTRIES: Array<[string, string]> = [
 
 const LANGUAGES: Array<[Language, string]> = [
   ['sw', 'Kiswahili'],
-  ['so', 'Somali'],
-  ['am', 'Amharic'],
-  ['om', 'Oromo'],
-  ['ar', 'Arabic'],
+  ['so', 'Soomaali'],
+  ['am', 'አማርኛ'],
+  ['om', 'Afaan Oromoo'],
+  ['ar', 'العربية'],
   ['en', 'English'],
+  ['fr', 'Français'],
+  ['ti', 'ትግርኛ'],
+  ['lg', 'Luganda'],
+  ['aa', 'Qafar af'],
 ];
 
 const LIVELIHOODS: Array<[Livelihood, string]> = [
   ['farmer', 'Farmer'],
   ['pastoralist', 'Pastoralist'],
+  ['agropastoralist', 'Agro-pastoralist'],
   ['fisherfolk', 'Fisherfolk'],
   ['urban', 'Urban'],
+  ['trader', 'Trader'],
+  ['displaced', 'Displaced / camp'],
 ];
 
 export function SubscribePage() {

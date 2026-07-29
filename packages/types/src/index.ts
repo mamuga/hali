@@ -3,14 +3,39 @@ export type HazardType =
   | "drought"
   | "locust"
   | "cyclone"
+  | "heatwave"
+  | "landslide"
+  | "wildfire"
+  /** An outbreak (e.g. post-flood cholera). `health` remains for general advisories. */
+  | "epidemic"
   | "health"
   | "other";
 
 export type Severity = "green" | "orange" | "red";
 
-export type Language = "sw" | "so" | "am" | "om" | "ar" | "en";
+export type Language =
+  | "sw"
+  | "so"
+  | "am"
+  | "om"
+  | "ar"
+  | "en"
+  | "fr"
+  | "ti"
+  | "lg"
+  | "aa";
 
-export type Livelihood = "farmer" | "pastoralist" | "fisherfolk" | "urban";
+/** Languages where LLM quality is weaker; the backend may serve English instead. */
+export type LowResourceLanguage = "ti" | "lg" | "aa";
+
+export type Livelihood =
+  | "farmer"
+  | "pastoralist"
+  | "agropastoralist"
+  | "fisherfolk"
+  | "urban"
+  | "trader"
+  | "displaced";
 
 export interface Alert {
   id: string;
@@ -34,6 +59,12 @@ export interface AlertTranslation {
   headline: string;
   body: string;
   audio_url?: string | null;
+  /**
+   * Set when the text is not actually in `language` — a low-resource
+   * translation fell below the clarity floor and English was served instead.
+   * null/undefined means the content genuinely is in the requested language.
+   */
+  fallback_language?: Language | null;
 }
 
 export interface ActionCard {
@@ -56,10 +87,19 @@ export interface CommunityReportResponse extends CommunityReport {
   reported_at: string;
 }
 
+/**
+ * `national` alerts (IFRC appeals, WHO outbreak notices) cover a whole country.
+ * They are real, but drawn alongside district footprints they hide them, so the
+ * map keeps them on a separate toggle.
+ */
+export type AlertScope = "local" | "national";
+
 export interface AlertFeatureProperties {
   id: string;
   hazard_type: HazardType;
   severity: Severity;
+  source?: string;
+  scope?: AlertScope;
   headline: string;
   body: string;
   affected_countries: string[];
@@ -78,14 +118,34 @@ export interface AlertGeoJSON {
   }>;
 }
 
+export interface CountryProperties {
+  iso2: string;
+  name: string;
+}
+
+export interface CountriesGeoJSON {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    geometry: GeoJSON.MultiPolygon | GeoJSON.Polygon;
+    properties: CountryProperties;
+  }>;
+}
+
 export interface CompoundRiskProperties {
   iso2: string;
   country: string;
+  /** 0-100. 100 means the whole country is under a red alert. */
   compound_risk_score: number;
   dominant_hazard: HazardType;
   alert_count: number;
+  /** Country-wide IFRC/WHO advisories, excluded from the area figures. */
+  national_advisories: number;
   max_severity: Severity;
-  overlap_km2: number;
+  /** Land under at least one subnational alert — unioned, so never double-counted. */
+  alert_area_km2: number;
+  country_area_km2: number;
+  alert_area_pct: number;
   community_reports_14d: number;
 }
 
@@ -125,6 +185,8 @@ export interface NearestAlert {
   dist_km: number;
   valid_to: string | null;
   population_exposed: number | null;
+  /** Country-wide advisory vs a subnational hazard footprint. */
+  scope: AlertScope;
 }
 
 export interface SpatialAnalysis {
@@ -134,6 +196,30 @@ export interface SpatialAnalysis {
   nearby_reports_7d: number;
   report_breakdown: Array<{ label: string; count: number }>;
   emerging_hotspots_nearby: number;
+}
+
+export interface AoiAlert {
+  id: string;
+  hazard_type: HazardType;
+  severity: Severity;
+  headline: string;
+  valid_to: string | null;
+  population_exposed: number | null;
+  /** Area of this alert that falls inside the drawn shape. */
+  overlap_km2: number;
+}
+
+/** Result of analysing a user-drawn area of interest. */
+export interface PolygonQueryResult {
+  area_km2: number;
+  /** Every intersecting alert. `alerts` is capped at 50 for display. */
+  alert_count: number;
+  alerts: AoiAlert[];
+  report_count: number;
+  report_hazards: HazardType[];
+  emerging_hotspots: number;
+  /** null means no population grid is loaded — never "nobody lives here". */
+  population_estimate: number | null;
 }
 
 export interface SubscriptionCreate {

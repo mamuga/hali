@@ -65,6 +65,33 @@ def setup_scheduler() -> AsyncIOScheduler:
         if enabled and job_id not in existing_ids:
             scheduler.add_job(_run_source, CronTrigger(hour=hour, minute=minute), args=[name], id=job_id, replace_existing=True)
 
+    # Condition and named-event feeds. These are the ones that actually produce
+    # East Africa alerts day to day: the physical models describe rainfall,
+    # while HAPI reports which districts are anomalous and IFRC/WHO report the
+    # epidemics and locust responses no satellite sees. Scheduled before the
+    # population backfill so new alerts carry exposure the same morning.
+    if settings.enable_hapi and "hapi-daily" not in existing_ids:
+        scheduler.add_job(
+            _run_hapi, CronTrigger(hour=7, minute=10), id="hapi-daily", replace_existing=True
+        )
+    # IPC is republished roughly three times a year, so a weekly refresh is
+    # ample — a daily download of ~60 MB of shapefiles for data that has not
+    # changed would be pure waste.
+    if settings.enable_fewsnet and "fewsnet-weekly" not in existing_ids:
+        scheduler.add_job(
+            _run_fewsnet,
+            CronTrigger(day_of_week="mon", hour=6, minute=45),
+            id="fewsnet-weekly",
+            replace_existing=True,
+        )
+    if (settings.enable_ifrc or settings.enable_who) and "named-events-daily" not in existing_ids:
+        scheduler.add_job(
+            _run_named_events,
+            CronTrigger(hour=7, minute=25),
+            id="named-events-daily",
+            replace_existing=True,
+        )
+
     # Runs after every ingestion job above so newly inserted alerts get real
     # translations the same day, instead of only once at process startup.
     if settings.ai_enabled and "ai-backlog-daily" not in existing_ids:
@@ -122,6 +149,51 @@ async def _run_hotspot_detection() -> None:
         logger.info("scheduler.hotspot_job_ok", **result)
     except Exception as exc:
         logger.error("scheduler.hotspot_job_failed", error=str(exc))
+
+
+async def _run_hapi() -> None:
+    try:
+        from hali.ingestion.hapi import run_ingest
+
+        result = await run_ingest(get_pool())
+        logger.info(
+            "scheduler.hapi_ok",
+            alerts=result["alerts_upserted"],
+            skipped_no_geometry=result["skipped_no_geometry"],
+        )
+    except Exception as exc:
+        logger.error("scheduler.hapi_failed", error=str(exc))
+
+
+async def _run_fewsnet() -> None:
+    try:
+        from hali.ingestion.fewsnet import run_ingest
+
+        result = await run_ingest(get_pool())
+        logger.info(
+            "scheduler.fewsnet_ok",
+            alerts=result["alerts_upserted"],
+            collection_date=result["collection_date"],
+        )
+    except Exception as exc:
+        logger.error("scheduler.fewsnet_failed", error=str(exc))
+
+
+async def _run_named_events() -> None:
+    from hali.ingestion.named_events import ingest_ifrc, ingest_who
+
+    pool = get_pool()
+    # Independent feeds: one being down must not cost us the other.
+    if settings.enable_ifrc:
+        try:
+            logger.info("scheduler.ifrc_ok", **await ingest_ifrc(pool))
+        except Exception as exc:
+            logger.error("scheduler.ifrc_failed", error=str(exc))
+    if settings.enable_who:
+        try:
+            logger.info("scheduler.who_ok", **await ingest_who(pool))
+        except Exception as exc:
+            logger.error("scheduler.who_failed", error=str(exc))
 
 
 async def _run_population_backfill() -> None:

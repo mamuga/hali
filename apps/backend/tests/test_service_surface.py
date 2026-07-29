@@ -20,7 +20,7 @@ def _assert_async_methods(cls, names):
 
 
 def test_report_service_surface():
-    _assert_async_methods(ReportService, ["create", "heatmap"])
+    _assert_async_methods(ReportService, ["create", "create_from_channel", "heatmap"])
     assert callable(getattr(ReportService, "schedule_classification", None))
 
 
@@ -29,7 +29,10 @@ def test_alert_service_surface():
 
 
 def test_spatial_service_surface():
-    _assert_async_methods(SpatialService, ["compound_risk", "emerging_hotspots", "analyse"])
+    _assert_async_methods(
+        SpatialService,
+        ["compound_risk", "emerging_hotspots", "analyse", "countries_geojson"],
+    )
 
 
 def test_no_methods_orphaned_outside_their_class():

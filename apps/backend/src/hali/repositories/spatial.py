@@ -15,9 +15,17 @@ SEVERITY_WEIGHT_SQL = "CASE a.severity WHEN 'red' THEN 3 WHEN 'orange' THEN 2 EL
 # Mombasa that they are in no country at all.
 COASTAL_TOLERANCE_METRES = 5000
 
+# Douglas-Peucker tolerance for the choropleth outlines, in degrees (~2 km).
+# Matches the boundary layer so the two overlay without visible seams.
+CHOROPLETH_TOLERANCE = 0.02
+
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return json.loads(value) if isinstance(value, str) else value
+
+
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    return json.loads(value) if isinstance(value, str) else (value or [])
 
 
 class SpatialRepository:
@@ -33,36 +41,88 @@ class SpatialRepository:
         Deviates from the spec's draft SQL in one way that matters: that query
         grouped by alert, emitting one row per alert-country pair, so a country
         with three active alerts produced three overlapping choropleth features.
-        This aggregates to exactly one feature per country and sums the
-        per-alert contributions instead.
+        This aggregates to exactly one feature per country.
+
+        AREA IS UNIONED, NOT SUMMED. The previous version summed each alert's
+        intersection with the country, which double-counts every place covered by
+        more than one alert. At 537 active alerts that stopped being a rounding
+        error: Kenya reported 2,708,468 km² of "overlap" against a true national
+        area of 585,764 km² — 4.6x the country. The score built on it ran to
+        51,688,807, a number with no unit and no ceiling, so the choropleth was
+        ranking countries by how many overlapping polygons a publisher happened
+        to draw rather than by how much ground is actually at risk.
+
+        Alerts are unioned into disjoint severity bands instead — red first, then
+        the orange that is not already red, then green that is neither — so every
+        square kilometre is counted exactly once, at its worst severity. That
+        makes the score a bounded 0-100: the severity-weighted share of national
+        land under alert, where 100 means the entire country is under a red one.
         """
         sql = f"""
         WITH active_alerts AS (
-            SELECT id, hazard_type, severity, geom
+            SELECT hazard_type, severity, geom,
+                   {SEVERITY_WEIGHT_SQL} AS sev_weight
             FROM alerts a
             WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+              -- IFRC appeals and WHO outbreak notices carry the whole national
+              -- outline, so counting their area makes every country 100% covered
+              -- and the choropleth a flat colour. They are advisories about a
+              -- country, not a measured hazard footprint within it. Their alert
+              -- count is still reported below.
+              AND a.source NOT IN ('ifrc', 'who')
         ),
-        alert_exposure AS (
+        -- One clipped, unioned footprint per country and severity. ST_Union here
+        -- is the whole point: it dissolves the stack of overlapping district
+        -- polygons into the actual ground they cover.
+        by_severity AS (
             SELECT
                 c.iso2,
-                c.name AS country_name,
-                a.hazard_type,
-                {SEVERITY_WEIGHT_SQL} AS sev_weight,
-                ST_Area(ST_Intersection(a.geom, c.geom)::geography) / 1e6 AS overlap_km2
+                a.sev_weight,
+                ST_Union(ST_Intersection(a.geom, c.geom)) AS geom
             FROM active_alerts a
             JOIN countries c ON ST_Intersects(a.geom, c.geom)
+            GROUP BY c.iso2, a.sev_weight
+        ),
+        -- Subtract the higher bands so the three areas are disjoint.
+        bands AS (
+            SELECT
+                iso2,
+                sev_weight,
+                ST_Area(
+                    COALESCE(
+                        ST_Difference(
+                            geom,
+                            (SELECT ST_Union(h.geom) FROM by_severity h
+                             WHERE h.iso2 = by_severity.iso2 AND h.sev_weight > by_severity.sev_weight)
+                        ),
+                        geom
+                    )::geography
+                ) / 1e6 AS band_km2
+            FROM by_severity
         ),
         per_country AS (
             SELECT
-                iso2,
-                country_name,
-                SUM(sev_weight * overlap_km2) AS weighted_exposure,
-                SUM(overlap_km2) AS overlap_km2,
+                b.iso2,
+                SUM(b.band_km2) AS alert_area_km2,
+                SUM(b.sev_weight * b.band_km2) AS weighted_area_km2,
+                MAX(b.sev_weight) AS max_sev_weight
+            FROM bands b
+            GROUP BY b.iso2
+        ),
+        -- Counts and dominant hazard are per-alert facts, not areas, so they are
+        -- unaffected by the union and stay on the raw join.
+        alert_facts AS (
+            SELECT
+                c.iso2,
                 COUNT(*) AS alert_count,
-                MAX(sev_weight) AS max_sev_weight,
-                (array_agg(hazard_type ORDER BY sev_weight DESC, overlap_km2 DESC))[1] AS dominant_hazard
-            FROM alert_exposure
-            GROUP BY iso2, country_name
+                COUNT(*) FILTER (WHERE a.source IN ('ifrc', 'who')) AS national_advisories,
+                (array_agg(a.hazard_type ORDER BY
+                           CASE a.severity WHEN 'red' THEN 3 WHEN 'orange' THEN 2 ELSE 1 END DESC,
+                           ST_Area(ST_Intersection(a.geom, c.geom)) DESC))[1] AS dominant_hazard
+            FROM alerts a
+            JOIN countries c ON ST_Intersects(a.geom, c.geom)
+            WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+            GROUP BY c.iso2
         ),
         report_density AS (
             SELECT
@@ -81,29 +141,215 @@ class SpatialRepository:
         )
         FROM (
             SELECT
-                ROUND((pc.weighted_exposure * (1 + COALESCE(rd.density, 0) * 100))::numeric, 2) AS score,
+                LEAST(
+                    100.0,
+                    (100.0 * pc.weighted_area_km2
+                        / NULLIF(3 * ST_Area(c.geom::geography) / 1e6, 0))
+                    * (1 + COALESCE(rd.density, 0) * 0.1)
+                ) AS score,
                 jsonb_build_object(
                     'type', 'Feature',
-                    'geometry', ST_AsGeoJSON(c.geom)::jsonb,
+                    -- Same simplification the boundary layer uses. The raw 1:10m
+                    -- outlines made this response 123 KB for eight polygons; the
+                    -- difference is invisible at the map's minimum zoom.
+                    'geometry', ST_AsGeoJSON(
+                        ST_SimplifyPreserveTopology(c.geom, {CHOROPLETH_TOLERANCE})
+                    )::jsonb,
                     'properties', jsonb_build_object(
                         'iso2', pc.iso2,
-                        'country', pc.country_name,
-                        'compound_risk_score', ROUND((pc.weighted_exposure * (1 + COALESCE(rd.density, 0) * 100))::numeric, 2),
-                        'dominant_hazard', pc.dominant_hazard,
-                        'alert_count', pc.alert_count,
+                        'country', c.name,
+                        'compound_risk_score', ROUND(LEAST(
+                            100.0,
+                            (100.0 * pc.weighted_area_km2
+                                / NULLIF(3 * ST_Area(c.geom::geography) / 1e6, 0))
+                            * (1 + COALESCE(rd.density, 0) * 0.1)
+                        )::numeric, 1),
+                        'dominant_hazard', af.dominant_hazard,
+                        'alert_count', af.alert_count,
+                        'national_advisories', af.national_advisories,
                         'max_severity', CASE pc.max_sev_weight WHEN 3 THEN 'red' WHEN 2 THEN 'orange' ELSE 'green' END,
-                        'overlap_km2', ROUND(pc.overlap_km2::numeric, 1),
+                        'alert_area_km2', ROUND(pc.alert_area_km2::numeric, 1),
+                        'country_area_km2', ROUND((ST_Area(c.geom::geography) / 1e6)::numeric, 1),
+                        'alert_area_pct', ROUND((100.0 * pc.alert_area_km2
+                            / NULLIF(ST_Area(c.geom::geography) / 1e6, 0))::numeric, 1),
                         'community_reports_14d', COALESCE(rd.report_count, 0)
                     )
                 ) AS feature
             FROM per_country pc
             JOIN countries c ON c.iso2 = pc.iso2
+            JOIN alert_facts af ON af.iso2 = pc.iso2
             LEFT JOIN report_density rd ON rd.iso2 = pc.iso2
         ) ranked
         """
         async with self.pool.acquire() as conn:
             value = await conn.fetchval(sql)
         return _as_dict(value)
+
+    async def countries_geojson(self, tolerance: float) -> dict[str, Any]:
+        """IGAD member state boundaries, simplified for the map.
+
+        The stored geometry is Natural Earth 1:10m — 5,636 vertices and ~118 KB
+        of GeoJSON, which is far more than a phone on 2G should download to draw
+        an outline. At the default tolerance it is ~28 KB, and the difference is
+        invisible at the zoom levels this map allows (min zoom 4).
+
+        ST_SimplifyPreserveTopology rather than ST_Simplify: the latter can
+        produce self-intersections and drop small rings, which would tear holes
+        in the outside-IGAD mask that uses these polygons.
+        """
+        sql = """
+        SELECT jsonb_build_object(
+            'type', 'FeatureCollection',
+            'features', COALESCE(jsonb_agg(jsonb_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, $1))::jsonb,
+                'properties', jsonb_build_object('iso2', iso2, 'name', name)
+            ) ORDER BY iso2), '[]'::jsonb)
+        )
+        FROM countries
+        """
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(sql, tolerance)
+        return _as_dict(value)
+
+    async def aoi_area_km2(self, geojson: str) -> float | None:
+        """Area of a drawn shape, touching no other table.
+
+        Deliberately separate from query_polygon so an oversized area can be
+        rejected before any spatial join runs. Returns None if PostGIS cannot
+        make sense of the geometry at all.
+        """
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(
+                """
+                SELECT ROUND(
+                    (ST_Area(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326))::geography)
+                     / 1e6)::numeric, 1)
+                """,
+                geojson,
+            )
+        return float(value) if value is not None else None
+
+    async def query_polygon(self, geojson: str, lang: str) -> dict[str, Any]:
+        """Everything HALI knows inside a user-drawn area of interest.
+
+        The geometry is parsed once into a CTE rather than re-parsed in every
+        subquery: ST_GeomFromGeoJSON on a hand-drawn ring is cheap, but the
+        spec's draft repeated it five times in one statement, and PostgreSQL
+        will not deduplicate the call for it.
+
+        ST_MakeValid because a hand-drawn shape self-intersects easily — a
+        bowtie polygon makes ST_Intersects raise rather than return false.
+        """
+        sql = """
+        WITH aoi AS (
+            SELECT ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)) AS geom
+        ),
+        aoi_area AS (
+            SELECT ROUND((ST_Area(geom::geography) / 1e6)::numeric, 1) AS area_km2 FROM aoi
+        ),
+        matched_alerts AS (
+            SELECT
+                a.id::text AS id,
+                a.hazard_type,
+                a.severity,
+                COALESCE(t.headline, en.headline, initcap(a.hazard_type) || ' alert') AS headline,
+                a.valid_to,
+                a.population_exposed,
+                ROUND((ST_Area(ST_Intersection(a.geom, aoi.geom)::geography) / 1e6)::numeric, 1) AS overlap_km2
+            FROM alerts a
+            CROSS JOIN aoi
+            LEFT JOIN alert_translations t ON t.alert_id = a.id AND t.language = $2
+            LEFT JOIN alert_translations en ON en.alert_id = a.id AND en.language = 'en'
+            WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+              AND ST_Intersects(a.geom, aoi.geom)
+            ORDER BY CASE a.severity WHEN 'red' THEN 0 WHEN 'orange' THEN 1 ELSE 2 END,
+                     overlap_km2 DESC
+            LIMIT 50
+        ),
+        matched_reports AS (
+            SELECT
+                COUNT(*) AS report_count,
+                COALESCE(ARRAY_AGG(DISTINCT cr.hazard_type), '{}') AS report_hazards
+            FROM community_reports cr
+            CROSS JOIN aoi
+            WHERE cr.reported_at > NOW() - INTERVAL '14 days'
+              AND ST_Intersects(cr.location, aoi.geom)
+        ),
+        matched_hotspots AS (
+            SELECT COUNT(*) AS hotspot_count
+            FROM emerging_hotspots eh
+            CROSS JOIN aoi
+            WHERE ST_Intersects(eh.location, aoi.geom)
+        ),
+        -- Counted separately from matched_alerts, which is capped at 50 for the
+        -- panel. A user drawing an AOI over the Horn intersects several hundred
+        -- FEWS NET districts; returning 50 with no total made the panel report
+        -- "50 alerts" for an area holding 300, which understates the situation
+        -- precisely where it is worst.
+        alert_total AS (
+            SELECT COUNT(*) AS alert_count
+            FROM alerts a
+            CROSS JOIN aoi
+            WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
+              AND ST_Intersects(a.geom, aoi.geom)
+        )
+        SELECT
+            (SELECT area_km2 FROM aoi_area) AS area_km2,
+            (SELECT alert_count FROM alert_total) AS alert_count,
+            (SELECT report_count FROM matched_reports) AS report_count,
+            (SELECT report_hazards FROM matched_reports) AS report_hazards,
+            (SELECT hotspot_count FROM matched_hotspots) AS emerging_hotspots,
+            COALESCE(
+                (SELECT jsonb_agg(to_jsonb(matched_alerts)) FROM matched_alerts),
+                '[]'::jsonb
+            ) AS alerts
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(sql, geojson, lang)
+            population = await self._population_in_aoi(conn, geojson)
+
+        alerts = _as_list(row["alerts"])
+        return {
+            "area_km2": float(row["area_km2"] or 0.0),
+            "alert_count": row["alert_count"] or 0,
+            "alerts": [
+                {
+                    "id": a["id"],
+                    "hazard_type": a["hazard_type"],
+                    "severity": a["severity"],
+                    "headline": a["headline"],
+                    "valid_to": a["valid_to"],
+                    "population_exposed": a["population_exposed"],
+                    "overlap_km2": float(a["overlap_km2"] or 0.0),
+                }
+                for a in alerts
+            ],
+            "report_count": row["report_count"] or 0,
+            "report_hazards": list(row["report_hazards"] or []),
+            "emerging_hotspots": row["emerging_hotspots"] or 0,
+            "population_estimate": population,
+        }
+
+    @staticmethod
+    async def _population_in_aoi(conn: asyncpg.Connection, geojson: str) -> int | None:
+        """Sum the population grid inside the area, if one has been ingested.
+
+        Returns None rather than 0 when `pop_grid` does not exist yet (it lands
+        in Phase 5) — "we have not measured this" and "nobody lives here" must
+        not look the same to the caller.
+        """
+        exists = await conn.fetchval("SELECT to_regclass('public.pop_grid') IS NOT NULL")
+        if not exists:
+            return None
+        return await conn.fetchval(
+            """
+            SELECT COALESCE(SUM(pop), 0)::bigint
+            FROM pop_grid
+            WHERE ST_Intersects(geom, ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)))
+            """,
+            geojson,
+        )
 
     async def emerging_hotspots(self) -> dict[str, Any]:
         """Latest stored DBSCAN hotspots as a GeoJSON FeatureCollection."""
@@ -146,13 +392,20 @@ class SpatialRepository:
             COALESCE(t.headline, en.headline, initcap(a.hazard_type) || ' alert') AS headline,
             ROUND((ST_Distance(a.geom::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) / 1000)::numeric, 1) AS dist_km,
             a.valid_to,
-            a.population_exposed
+            a.population_exposed,
+            CASE WHEN a.source IN ('ifrc', 'who') THEN 'national' ELSE 'local' END AS scope
         FROM alerts a
         LEFT JOIN alert_translations t ON t.alert_id = a.id AND t.language = $3
         LEFT JOIN alert_translations en ON en.alert_id = a.id AND en.language = 'en'
         WHERE (a.valid_to > NOW() OR a.valid_to IS NULL)
           AND ST_DWithin(a.geom::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, 500000)
-        ORDER BY dist_km ASC
+        -- Distance alone ranks badly here. A country-scoped advisory carries the
+        -- whole national outline, so every click inside Kenya sits at 0.0 km from
+        -- all of them and the tie is broken arbitrarily. Clicking Lodwar returned
+        -- a Kenya-wide Ebola readiness appeal second and the Turkana drought that
+        -- the click was actually about fifth. Subnational alerts are what a point
+        -- query is for; national ones stay in the list, just below.
+        ORDER BY (a.source IN ('ifrc', 'who')), dist_km ASC, a.severity = 'red' DESC
         LIMIT 5
         """
         context_sql = f"""
@@ -202,6 +455,7 @@ class SpatialRepository:
                     "dist_km": float(row["dist_km"]),
                     "valid_to": row["valid_to"],
                     "population_exposed": row["population_exposed"],
+                    "scope": row["scope"],
                 }
                 for row in alert_rows
             ],

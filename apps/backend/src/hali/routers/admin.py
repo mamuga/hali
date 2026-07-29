@@ -105,6 +105,68 @@ async def backfill_population(limit: int = 25):
     return await backfill_population_exposure(get_pool(), limit)
 
 
+@router.post("/ingest-worldpop")
+async def ingest_worldpop(countries: str | None = None):
+    """Load the WorldPop population grid (one-shot; static data).
+
+    Downloads ~27 MB of raster and takes several minutes, so it is deliberately
+    not on the scheduler. `countries` is an optional comma-separated ISO2 list.
+    """
+    from hali.database import get_pool
+    from hali.ingestion.worldpop import run_ingest
+
+    only = [c.strip().upper() for c in countries.split(",")] if countries else None
+    return await run_ingest(get_pool(), only)
+
+
+@router.post("/ingest-boundaries")
+async def ingest_boundaries_endpoint(level: int = 2):
+    """Load OCHA COD admin boundaries (one-shot; they change over years)."""
+    from hali.database import get_pool
+    from hali.ingestion.admin_boundaries import ingest_boundaries
+
+    return await ingest_boundaries(get_pool(), level)
+
+
+@router.post("/ingest-hapi")
+async def ingest_hapi_endpoint(countries: str | None = None):
+    """Turn HDX HAPI dekadal rainfall anomalies into subnational alerts."""
+    from hali.database import get_pool
+    from hali.ingestion.hapi import run_ingest
+
+    only = [c.strip().upper() for c in countries.split(",")] if countries else None
+    return await run_ingest(get_pool(), only)
+
+
+@router.post("/ingest-fewsnet")
+async def ingest_fewsnet_endpoint(countries: str | None = None, collection_date: str | None = None):
+    """Load FEWS NET IPC food-security classifications as district polygons."""
+    from hali.database import get_pool
+    from hali.ingestion.fewsnet import run_ingest
+
+    only = [c.strip().upper() for c in countries.split(",")] if countries else None
+    return await run_ingest(get_pool(), only, collection_date)
+
+
+@router.post("/ingest-named-events")
+async def ingest_named_events_endpoint():
+    """Pull IFRC GO appeals and WHO outbreak news for IGAD countries."""
+    from hali.database import get_pool
+    from hali.ingestion.named_events import ingest_ifrc, ingest_who
+
+    pool = get_pool()
+    return {"ifrc": await ingest_ifrc(pool), "who": await ingest_who(pool)}
+
+
+@router.post("/recompute-population")
+async def recompute_population(limit: int = 500):
+    """Recompute population_exposed for active alerts from the local grid."""
+    from hali.database import get_pool
+    from hali.services.population import backfill_population_local
+
+    return await backfill_population_local(get_pool(), limit)
+
+
 @router.get("/ai-stats")
 async def ai_stats():
     """Return AI router request counts per provider."""

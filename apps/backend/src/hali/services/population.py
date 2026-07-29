@@ -160,12 +160,119 @@ def _extract_total(payload: dict[str, Any]) -> int | None:
         return None
 
 
+# ── Local zonal statistics (preferred once pop_grid is loaded) ────────────────
+
+
+async def pop_grid_available(conn: asyncpg.Connection) -> bool:
+    """True when the population grid table exists and holds data."""
+    exists = await conn.fetchval("SELECT to_regclass('public.pop_grid') IS NOT NULL")
+    if not exists:
+        return False
+    return bool(await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pop_grid)"))
+
+
+async def population_in_geometry(conn: asyncpg.Connection, alert_id: Any) -> int | None:
+    """Population inside an alert's footprint, summed locally from pop_grid.
+
+    Returns None when no grid is loaded, so the caller can fall back to the
+    WorldPop REST path rather than recording a confident zero.
+    """
+    if not await pop_grid_available(conn):
+        return None
+    return await conn.fetchval(
+        """
+        SELECT COALESCE(SUM(p.pop), 0)::bigint
+        FROM pop_grid p
+        JOIN alerts a ON a.id = $1
+        WHERE ST_Intersects(p.geom, a.geom)
+        """,
+        alert_id,
+    )
+
+
+# Sources whose alert footprint is a whole country rather than a hazard
+# footprint. Summing the grid over one of these returns the national population,
+# which is true but useless and actively misleading: an IFRC Ebola *readiness*
+# appeal for Ethiopia is not "114,795,154 people exposed to Ebola", and next to
+# a district drought affecting 50,000 it dominates every ranking. Leaving the
+# column NULL is the honest answer — the UI already renders NULL as "not
+# computed" rather than zero.
+COUNTRY_SCOPED_SOURCES = ("ifrc", "who")
+
+
+# No quota applies to the local grid — this is one set-based UPDATE, not a call
+# per alert — so the cap exists only to bound a pathological run. It must stay
+# comfortably above the live feed: at 500 against 523 eligible alerts, the last
+# 23 sat outside every run's window and would have kept whatever exposure they
+# were first given, even after their geometry was replaced by a new release.
+DEFAULT_LOCAL_BACKFILL_LIMIT = 5000
+
+
+async def backfill_population_local(
+    pool: asyncpg.Pool, limit: int = DEFAULT_LOCAL_BACKFILL_LIMIT
+) -> dict[str, Any]:
+    """Recompute exposure for active alerts using the local grid.
+
+    Far cheaper than the REST path — no network, no per-alert quota — so the
+    whole active feed is recomputed in one run rather than drained over several.
+    """
+    async with pool.acquire() as conn:
+        if not await pop_grid_available(conn):
+            return {"status": "no_pop_grid", "updated": 0}
+
+        # One set-based statement rather than a query per alert. The per-alert
+        # loop was fine at 25 alerts; at 537 it became ~9 minutes of round
+        # trips, almost all of it network latency rather than work.
+        updated = await conn.fetchval(
+            """
+            WITH targets AS (
+                SELECT id FROM alerts
+                WHERE (valid_to > NOW() OR valid_to IS NULL)
+                  AND source <> ALL($2::text[])
+                ORDER BY processed_at DESC
+                LIMIT $1
+            ),
+            totals AS (
+                SELECT t.id, COALESCE(SUM(p.pop), 0)::bigint AS pop
+                FROM targets t
+                JOIN alerts a ON a.id = t.id
+                LEFT JOIN pop_grid p ON ST_Intersects(p.geom, a.geom)
+                GROUP BY t.id
+            ),
+            applied AS (
+                UPDATE alerts a
+                SET population_exposed = totals.pop
+                FROM totals
+                WHERE a.id = totals.id
+                RETURNING 1
+            )
+            SELECT count(*) FROM applied
+            """,
+            limit,
+            list(COUNTRY_SCOPED_SOURCES),
+        )
+
+    logger.info("population.local_backfill_complete", updated=updated)
+    return {"status": "ok", "updated": updated}
+
+
 async def backfill_population_exposure(pool: asyncpg.Pool, limit: int = 25) -> dict[str, Any]:
     """Fill population_exposed for alerts that do not have it yet.
 
-    Bounded per run: WorldPop allows ~1000 calls/day and this runs on a schedule,
-    so a large backlog drains over several runs rather than exhausting the quota.
+    Prefers the local pop_grid when one has been ingested: it is a single
+    indexed SUM with no network call, no per-day quota, and no partial-failure
+    mode. Falls back to WorldPop's REST API only while the grid is empty.
+
+    The REST path is bounded per run because WorldPop allows ~1000 calls/day and
+    this runs on a schedule, so a large backlog drains over several runs rather
+    than exhausting the quota.
     """
+    async with pool.acquire() as conn:
+        if await pop_grid_available(conn):
+            local = await backfill_population_local(pool, max(limit, DEFAULT_LOCAL_BACKFILL_LIMIT))
+            local["mode"] = "pop_grid"
+            return local
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
