@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="853" viewBox="0 0 1280 853" role="img" aria-labelledby="title desc">
+  <title id="title">HALI early warning architecture</title>
+  <desc id="desc">Live sources flow through ingestion and AI processing into PostGIS spatial intelligence and three last-mile delivery channels.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071526"/><stop offset="1" stop-color="#102a43"/></linearGradient>
+    <linearGradient id="source" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#164e63"/><stop offset="1" stop-color="#155e75"/></linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#155e75"/><stop offset="1" stop-color="#0e7490"/></linearGradient>
+    <linearGradient id="spatial" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#164e63"/><stop offset="1" stop-color="#166534"/></linearGradient>
+    <linearGradient id="delivery" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#7c2d12"/><stop offset="1" stop-color="#9a3412"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".28"/></filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#67e8f9"/></marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#86efac"/></marker>
+    <style>
+      .title{font:700 30px Inter,Arial,sans-serif;fill:#ecfeff}.subtitle{font:400 14px Inter,Arial,sans-serif;fill:#94a3b8}.section{font:700 12px Inter,Arial,sans-serif;letter-spacing:2px;fill:#67e8f9}.box{stroke:#38bdf8;stroke-opacity:.45;stroke-width:1.5}.label{font:700 15px Inter,Arial,sans-serif;fill:#f8fafc}.small{font:400 11px Inter,Arial,sans-serif;fill:#cbd5e1}.tiny{font:400 10px Inter,Arial,sans-serif;fill:#bae6fd}.pill{font:600 10px Inter,Arial,sans-serif;fill:#082f49}.line{fill:none;stroke:#67e8f9;stroke-width:2;stroke-opacity:.8;marker-end:url(#arrow)}
+    </style>
+  </defs>
+
+  <rect width="1280" height="853" fill="url(#bg)"/>
+  <circle cx="1120" cy="110" r="220" fill="#0e7490" opacity=".08"/><circle cx="80" cy="760" r="260" fill="#16a34a" opacity=".06"/>
+  <text x="64" y="58" class="title">HALI · live early-warning architecture</text>
+  <text x="64" y="84" class="subtitle">13 data sources → resilient ingestion → AI-enriched alerts → spatial intelligence → last-mile action</text>
+  <text x="1090" y="58" class="tiny">RAILWAY · PRODUCTION</text>
+
+  <text x="64" y="124" class="section">01  SIGNALS</text>
+  <rect x="64" y="142" width="240" height="556" rx="16" fill="url(#source)" class="box" filter="url(#shadow)"/>
+  <text x="86" y="174" class="label">Live + reference sources</text>
+  <text x="86" y="198" class="small">Independent adapters · scheduled ETL</text>
+  <g transform="translate(86 222)">
+    <rect width="196" height="30" rx="8" fill="#cffafe"/><text x="12" y="20" class="pill">FEWS NET · IPC</text>
+    <rect y="38" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="58" class="pill">HDX HAPI · rainfall</text>
+    <rect y="76" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="96" class="pill">GDACS · disasters</text>
+    <rect y="114" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="134" class="pill">CHIRPS · rainfall</text>
+    <rect y="152" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="172" class="pill">NOAA GFS · forecast</text>
+    <rect y="190" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="210" class="pill">IFRC GO · appeals</text>
+    <rect y="228" width="196" height="30" rx="8" fill="#bae6fd"/><text x="12" y="248" class="pill">WHO · outbreaks</text>
+    <rect y="266" width="196" height="30" rx="8" fill="#bbf7d0"/><text x="12" y="286" class="pill">WorldPop · population</text>
+    <rect y="304" width="196" height="30" rx="8" fill="#bbf7d0"/><text x="12" y="324" class="pill">OCHA COD-AB · 891 districts</text>
+    <rect y="342" width="196" height="30" rx="8" fill="#bbf7d0"/><text x="12" y="362" class="pill">Natural Earth · countries</text>
+  </g>
+  <text x="86" y="635" class="tiny">+ ICPAC · GloFAS · community reports</text>
+  <text x="86" y="660" class="small">Raw records are retained and replayable.</text>
+
+  <text x="350" y="124" class="section">02  INGEST + ENRICH</text>
+  <rect x="350" y="142" width="258" height="208" rx="16" fill="url(#core)" class="box" filter="url(#shadow)"/>
+  <text x="374" y="178" class="label">FastAPI ingestion layer</text>
+  <text x="374" y="204" class="small">Validate · normalise · spatial join</text>
+  <text x="374" y="230" class="small">Idempotent loaders + dead letters</text>
+  <rect x="374" y="254" width="210" height="30" rx="8" fill="#cffafe"/><text x="388" y="274" class="pill">APScheduler · independent jobs</text>
+  <rect x="374" y="294" width="210" height="30" rx="8" fill="#cffafe"/><text x="388" y="314" class="pill">PostGIS geometry validation</text>
+
+  <rect x="350" y="382" width="258" height="316" rx="16" fill="#164e63" class="box" filter="url(#shadow)"/>
+  <text x="374" y="418" class="label">AI processing</text>
+  <text x="374" y="444" class="small">Three-model ensemble · scored output</text>
+  <rect x="374" y="468" width="210" height="42" rx="9" fill="#fef3c7"/><text x="388" y="494" class="pill">Claude · primary</text>
+  <rect x="374" y="520" width="210" height="42" rx="9" fill="#fef3c7"/><text x="388" y="546" class="pill">Gemini · fallback</text>
+  <rect x="374" y="572" width="210" height="42" rx="9" fill="#fef3c7"/><text x="388" y="598" class="pill">Groq · fallback</text>
+  <text x="374" y="646" class="small">10 languages · 7 livelihoods</text>
+  <text x="374" y="670" class="small">Translations + action cards</text>
+
+  <text x="654" y="124" class="section">03  SPATIAL INTELLIGENCE</text>
+  <rect x="654" y="142" width="282" height="556" rx="16" fill="url(#spatial)" class="box" filter="url(#shadow)"/>
+  <text x="678" y="178" class="label">PostgreSQL + PostGIS</text>
+  <text x="678" y="204" class="small">One spatial source of truth</text>
+  <rect x="678" y="232" width="234" height="54" rx="10" fill="#dcfce7"/><text x="694" y="255" class="pill">891 admin2 polygons</text><text x="694" y="272" class="pill">district-level alert footprints</text>
+  <rect x="678" y="300" width="234" height="54" rx="10" fill="#dcfce7"/><text x="694" y="323" class="pill">Compound risk choropleth</text><text x="694" y="340" class="pill">real population exposure</text>
+  <rect x="678" y="368" width="234" height="54" rx="10" fill="#dcfce7"/><text x="694" y="391" class="pill">AOI polygon queries</text><text x="694" y="408" class="pill">alerts · reports · population</text>
+  <rect x="678" y="436" width="234" height="54" rx="10" fill="#dcfce7"/><text x="694" y="459" class="pill">DBSCAN hotspot detection</text><text x="694" y="476" class="pill">unconfirmed community signal</text>
+  <rect x="678" y="504" width="234" height="54" rx="10" fill="#dcfce7"/><text x="694" y="527" class="pill">Temporal alert playback</text><text x="694" y="544" class="pill">severity + hazard layers</text>
+  <text x="678" y="610" class="small">Cached spatial APIs · GeoJSON</text>
+  <text x="678" y="634" class="small">Railway PostGIS production database</text>
+
+  <text x="982" y="124" class="section">04  REACH</text>
+  <rect x="982" y="142" width="234" height="556" rx="16" fill="url(#delivery)" class="box" filter="url(#shadow)"/>
+  <text x="1006" y="178" class="label">Action at the last mile</text>
+  <text x="1006" y="204" class="small">No registration required</text>
+  <rect x="1006" y="244" width="186" height="86" rx="12" fill="#ffedd5"/><text x="1022" y="274" class="pill">PWA / React</text><text x="1022" y="296" class="pill">Map · feed · reports</text><text x="1022" y="318" class="pill">offline queue</text>
+  <rect x="1006" y="354" width="186" height="86" rx="12" fill="#ffedd5"/><text x="1022" y="384" class="pill">WhatsApp Cloud API</text><text x="1022" y="406" class="pill">opt-in · alerts · reports</text><text x="1022" y="428" class="pill">local language</text>
+  <rect x="1006" y="464" width="186" height="86" rx="12" fill="#ffedd5"/><text x="1022" y="494" class="pill">USSD / SMS</text><text x="1022" y="516" class="pill">feature phone access</text><text x="1022" y="538" class="pill">zero data required</text>
+  <text x="1006" y="606" class="small">Humanitarian action guidance</text>
+  <text x="1006" y="630" class="small">in 10 regional languages</text>
+
+  <path d="M304 420 C324 420 330 246 350 246" class="line"/>
+  <path d="M608 246 C628 246 636 270 654 270" class="line"/>
+  <path d="M608 540 C628 540 636 520 654 520" class="line"/>
+  <path d="M936 420 C954 420 962 420 982 420" class="line"/>
+  <path d="M936 590 C954 590 962 590 982 590" class="line"/>
+
+  <rect x="64" y="748" width="1152" height="52" rx="12" fill="#020617" stroke="#334155"/>
+  <text x="88" y="780" class="small">Feedback loop:</text><text x="184" y="780" class="tiny">community reports → DBSCAN emerging hotspot → severity escalation → broadcast</text>
+  <text x="1030" y="780" class="tiny">HALI · Railway production</text>
+</svg>

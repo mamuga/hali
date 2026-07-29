@@ -41,6 +41,45 @@ def test_page_helper_truncates_rather_than_overflowing():
     assert len(ussd._page("CON " + "x" * 500)) == ussd.USSD_MAX_CHARS
 
 
+def test_truncation_marker_does_not_itself_force_ucs2():
+    """Regression: the marker used to be "…", which is outside GSM-7.
+
+    Trimming an all-ASCII page to 182 characters with a non-GSM-7 marker pushed
+    the page into UCS-2, whose real limit is 80 — so "fitting" the page was what
+    made the gateway cut it in half.
+    """
+    trimmed = ussd._page("END " + "a" * 500)
+    assert ussd.GSM7_ALPHABET.issuperset(trimmed)
+    assert len(trimmed) <= ussd.page_limit(trimmed)
+
+
+@pytest.mark.parametrize(
+    ("name", "body"),
+    [
+        ("amharic", "ቤተሰብዎን እና ልጆችን ጨምሮ ሁሉንም ከፍ ወዳለ እና ደህንነቱ የተጠበቀ ቦታ ያንቀሳቅሱ።" * 5),
+        ("arabic", "فيضان قادم في إريتريا وإثيوبيا والسودان" * 5),
+        ("tigrinya", "ኣብ ኤርትራ ከቢድ movements ጎርፍ ይመጽእ ኣሎ" * 5),
+    ],
+)
+def test_non_gsm7_pages_are_clamped_to_the_ucs2_limit(name, body):
+    """A translated alert gets 80 characters, not 182."""
+    page = ussd._page(f"END {body}")
+    assert len(page) <= ussd.USSD_MAX_CHARS_UCS2, (
+        f"{name} page is {len(page)} chars, over the UCS-2 limit"
+    )
+
+
+def test_gsm7_page_still_gets_the_full_length():
+    """The UCS-2 clamp must not penalise Latin-script content."""
+    page = ussd._page("END " + "Move your animals to higher ground. " * 20)
+    assert len(page) == ussd.USSD_MAX_CHARS
+
+
+def test_short_pages_are_returned_untouched():
+    for body in ("CON Welcome to HALI", "END ጎርፍ ይመጽእ ኣሎ"):
+        assert ussd._page(body) == body
+
+
 def test_every_menu_option_is_reachable_by_index():
     """_pick is 1-indexed; a 10-option menu must not need a two-digit entry
     that collides with the '1' prefix of another option."""

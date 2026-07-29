@@ -84,6 +84,7 @@ export function HaliMap({ lang = 'sw' }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const alertLayerRef = useRef<L.GeoJSON | null>(null);
+  const ipcLayerRef = useRef<L.GeoJSON | null>(null);
   const heatLayerRef = useRef<L.Layer | null>(null);
   const hotspotLayerRef = useRef<L.LayerGroup | null>(null);
   const riskLayerRef = useRef<L.GeoJSON | null>(null);
@@ -351,9 +352,19 @@ export function HaliMap({ lang = 'sw' }: Props) {
         const isNational = (f: { properties?: { scope?: string } } | undefined) =>
           f?.properties?.scope === 'national';
 
+        const ipcFeatures = {
+          ...geojson,
+          // FEWS NET publishes IPC food-security classifications as district
+          // polygons. Keep them separate so a reviewer can inspect the
+          // subnational food-insecurity layer without the other hazard feeds
+          // obscuring it.
+          features: geojson.features.filter((f) => f.properties?.source === 'fewsnet'),
+        };
         const localFeatures = {
           ...geojson,
-          features: geojson.features.filter((f) => !isNational(f)),
+          features: geojson.features.filter(
+            (f) => !isNational(f) && f.properties?.source !== 'fewsnet',
+          ),
         };
         const nationalFeatures = {
           ...geojson,
@@ -423,6 +434,27 @@ export function HaliMap({ lang = 'sw' }: Props) {
 
         alertLayerRef.current = layer;
         registerOverlay('Alert zones', layer);
+
+        if (ipcLayerRef.current) mapRef.current?.removeLayer(ipcLayerRef.current);
+        if (ipcFeatures.features.length > 0) {
+          const ipcLayer = L.geoJSON(ipcFeatures, {
+            style: (f) => {
+              const severity = f?.properties?.severity ?? 'green';
+              const colour = SEV_COLOUR[severity] ?? SEV_COLOUR.green;
+              return {
+                color: colour,
+                fillColor: colour,
+                fillOpacity: 0.55,
+                weight: 1.2,
+                opacity: 0.95,
+              };
+            },
+            onEachFeature: bindAlert,
+          });
+          ipcLayer.addTo(mapRef.current!);
+          ipcLayerRef.current = ipcLayer;
+          registerOverlay('FEWS NET / IPC food insecurity', ipcLayer);
+        }
         setCount(localFeatures.features.length);
       })
       .catch(() => setError(true))

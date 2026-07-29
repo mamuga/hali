@@ -16,9 +16,10 @@ Menu tree:
       3*L*V*M   subscription stored, END
     4           about HALI
 
-Two hard constraints from the AT gateway: a page may not exceed 182 characters,
-and the session is killed at 3 seconds. Every database call is therefore given a
-2-second budget with a static fallback.
+Two hard constraints from the AT gateway: a page may not exceed 182 GSM-7
+characters (only 80 once any character forces the page into UCS-2, which every
+non-Latin translation does), and the session is killed at 3 seconds. Every
+database call is therefore given a 2-second budget with a static fallback.
 """
 from __future__ import annotations
 
@@ -39,7 +40,28 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["ussd"])
 
+# A USSD page carries 160 octets. GSM-7 packs seven bits per character, so 182
+# of them fit. A single character outside the GSM-7 alphabet forces the *whole*
+# page into UCS-2 at two octets per character, and only 80 then fit — so the
+# usable length depends on the content, not just on the channel.
 USSD_MAX_CHARS = 182
+USSD_MAX_CHARS_UCS2 = 80
+
+# GSM 03.38: the basic table plus the characters reachable through the escape
+# table. Anything not in here forces UCS-2.
+GSM7_ALPHABET = frozenset(
+    "@£$¥èéùìòÇ\nØø\rÅå"
+    "Δ_ΦΓΛΩΠΨΣΘΞÆæßÉ"
+    " !\"#¤%&'()*+,-./0123456789:;<=>?"
+    "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§"
+    "¿abcdefghijklmnopqrstuvwxyzäöñüà"
+    "^{}\\[~]|€"
+)
+
+# Deliberately ASCII. A "…" here would itself be the character that forces the
+# page into UCS-2, so the act of trimming a page to fit would halve the space
+# available to it — the failure this constant exists to prevent.
+TRUNCATION_MARKER = "..."
 # AT terminates the session at 3s. The budget below covers ALL database work in
 # one request, not each call: a handler makes up to three sequential queries, so
 # a per-call timeout would allow 3x the budget and blow the session anyway.
@@ -111,11 +133,28 @@ COUNTRY_FALLBACK_POINT = {
 }
 
 
+def page_limit(text: str) -> int:
+    """How many characters this particular page may hold.
+
+    Translated alerts (Amharic, Arabic, Tigrinya) are outside GSM-7 and so get
+    less than half the room a Latin-script page gets.
+    """
+    if GSM7_ALPHABET.issuperset(text):
+        return USSD_MAX_CHARS
+    return USSD_MAX_CHARS_UCS2
+
+
 def _page(text: str) -> str:
-    """Clamp a response to the gateway's per-page character limit."""
-    if len(text) <= USSD_MAX_CHARS:
+    """Clamp a response to the gateway's per-page character limit.
+
+    The limit is measured against the untrimmed text: dropping the tail of a
+    UCS-2 page may leave only GSM-7 characters behind, and re-deriving a longer
+    limit from that would let the page grow back past what the gateway accepts.
+    """
+    limit = page_limit(text)
+    if len(text) <= limit:
         return text
-    return text[: USSD_MAX_CHARS - 1].rstrip() + "…"
+    return text[: limit - len(TRUNCATION_MARKER)].rstrip() + TRUNCATION_MARKER
 
 
 def _con(body: str) -> str:

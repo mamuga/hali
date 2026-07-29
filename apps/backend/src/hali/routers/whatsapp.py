@@ -416,22 +416,48 @@ async def send_whatsapp_template(
 
 
 async def send_alert_template(to: str, alert, headline: str, first_step: str, language: str) -> bool:
-    """Send a proactive alert using the Meta-approved template.
+    """Send a proactive alert, preferring the Meta-approved template.
 
     Free-form text only reaches a user inside the 24-hour customer service
     window. A broadcast is unsolicited, so it has to go through an approved
     template or Meta drops it.
+
+    Templates can be unavailable for reasons outside our control — awaiting
+    review, or paused on quality grounds. Rather than drop the alert, fall back
+    to free-form text, which still reaches every subscriber who messaged us in
+    the last 24 hours. A late warning to some beats no warning to anyone; the
+    fallback is logged so silent degradation is visible in the logs.
     """
-    return await send_whatsapp_template(
+    first_step = first_step or "Follow local guidance."
+    sent = await send_whatsapp_template(
         to,
         ALERT_TEMPLATE_NAME,
         language,
-        [
-            alert["hazard_type"],
-            alert["severity"].upper(),
-            headline,
-            first_step or "Follow local guidance.",
-        ],
+        [alert["hazard_type"], alert["severity"].upper(), headline, first_step],
+    )
+    if sent:
+        return True
+
+    logger.warning(
+        f"Template {ALERT_TEMPLATE_NAME} unavailable — falling back to free-form "
+        f"text for {to[:6]}****"
+    )
+    return await _send_whatsapp_message(to, _alert_text(alert, headline, first_step))
+
+
+def _alert_text(alert, headline: str, first_step: str) -> str:
+    """Plain-text rendering of the alert template, for the free-form fallback.
+
+    Kept in step with hali_alert_v1's body so subscribers see the same content
+    either way.
+    """
+    return (
+        f"HALI alert: {alert['hazard_type']}\n"
+        f"Severity: {alert['severity'].upper()}\n\n"
+        f"{headline}\n\n"
+        f"First action: {first_step}\n\n"
+        "Follow guidance from your local authorities.\n"
+        "Reply STOP to unsubscribe"
     )
 
 
@@ -443,18 +469,31 @@ async def send_severity_upgrade_template(
     first_step: str,
     language: str,
 ) -> bool:
-    """Notify a subscriber that community reports escalated an alert's severity."""
-    return await send_whatsapp_template(
+    """Notify a subscriber that community reports escalated an alert's severity.
+
+    Falls back to free-form text on template unavailability, as send_alert_template does.
+    """
+    first_step = first_step or "Follow local guidance."
+    sent = await send_whatsapp_template(
         to,
         SEVERITY_UPGRADE_TEMPLATE_NAME,
         language,
-        [
-            headline,
-            new_severity.upper(),
-            str(report_count),
-            first_step or "Follow local guidance.",
-        ],
+        [headline, new_severity.upper(), str(report_count), first_step],
     )
+    if sent:
+        return True
+
+    logger.warning(
+        f"Template {SEVERITY_UPGRADE_TEMPLATE_NAME} unavailable — falling back to "
+        f"free-form text for {to[:6]}****"
+    )
+    text = (
+        f"Alert upgraded: {headline} is now {new_severity.upper()}.\n"
+        f"Reason: {report_count} reports from your community.\n\n"
+        f"First action: {first_step}\n\n"
+        "Follow guidance from your local authorities."
+    )
+    return await _send_whatsapp_message(to, text)
 
 
 async def _post_message(url: str, headers: dict, payload: dict, to: str) -> bool:

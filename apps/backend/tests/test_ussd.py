@@ -77,7 +77,9 @@ def test_pages_never_exceed_gateway_limit():
 def test_page_truncates_long_body():
     long_text = "x" * 500
     assert len(ussd._page(long_text)) == ussd.USSD_MAX_CHARS
-    assert ussd._page(long_text).endswith("…")
+    # ASCII marker: "…" is outside GSM-7 and would force the page into UCS-2,
+    # where the real limit is 80 rather than 182.
+    assert ussd._page(long_text).endswith(ussd.TRUNCATION_MARKER)
 
 
 def test_degrades_when_database_unavailable():
