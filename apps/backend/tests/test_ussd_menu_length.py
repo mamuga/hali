@@ -88,3 +88,18 @@ def test_every_menu_option_is_reachable_by_index():
             assert ussd._pick(options, str(index)) == expected
         assert ussd._pick(options, str(len(options) + 1)) is None
         assert ussd._pick(options, "0") is None
+
+
+def test_alert_menu_keeps_its_options_when_the_headline_is_not_gsm7():
+    """An Amharic headline must not push the livelihood options off the page.
+
+    The options alone exceed the 80 characters a UCS-2 page allows, so a
+    translated headline can never share this page with them; the caller would
+    otherwise get a CON prompt with nothing selectable.
+    """
+    menu = f"Actions for:\n{ussd._numbered(ussd.LIVELIHOODS)}"
+    page = ussd._con(f"RED FLOOD alert.\n{menu}")
+    assert len(page) <= ussd.page_limit(page)
+    # Every option survives intact.
+    for index, (_, label) in enumerate(ussd.LIVELIHOODS, start=1):
+        assert f"{index}. {label}" in page

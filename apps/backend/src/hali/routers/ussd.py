@@ -247,8 +247,18 @@ async def _handle_alert(phone: str, parts: list[str]) -> str:
         return _end("No active alerts for your area right now. Dial again later.")
 
     if livelihood is None:
-        summary = f"{view['severity'].upper()} {view['hazard_type'].upper()}: {view['headline']}"
-        return _con(f"{summary}\nActions for:\n{_numbered(LIVELIHOODS)}")
+        label = f"{view['severity'].upper()} {view['hazard_type'].upper()}"
+        menu = f"Actions for:\n{_numbered(LIVELIHOODS)}"
+        # A translated headline forces the page into UCS-2, and the livelihood
+        # options alone already exceed the 80 characters left there — the
+        # caller would be shown a prompt with nothing selectable. Where the
+        # headline does not fit, drop it and keep the menu navigable: severity
+        # and hazard still carry the warning, and the translated guidance
+        # follows on the next page, which is the caller's alone.
+        with_headline = f"CON {label}: {view['headline']}\n{menu}"
+        if len(with_headline) <= page_limit(with_headline):
+            return with_headline
+        return _con(f"{label} alert.\n{menu}")
 
     if not view.get("steps"):
         return _end(f"{view['severity'].upper()} {view['hazard_type']}: follow local guidance and move to safety early.")
