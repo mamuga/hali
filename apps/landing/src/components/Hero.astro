@@ -1,0 +1,114 @@
+---
+import { ArrowUpRight } from 'lucide-react';
+import { APP_URL, USSD_CODE, WHATSAPP_URL, WHATSAPP_NUMBER } from '../config';
+import { facts, languages, countries } from '../data/site';
+
+const readout = [
+  {
+    key: 'sources',
+    value: String(facts.sources),
+    detail: 'GDACS · CHIRPS · GFS · GloFAS · ICPAC',
+  },
+  {
+    key: 'languages',
+    value: String(facts.languages),
+    detail: languages.map((l) => l.code).join(' '),
+  },
+  {
+    key: 'countries',
+    value: String(facts.countries),
+    detail: 'KE ET SO UG DJ ER SD SS',
+  },
+  { key: 'channels', value: String(facts.channels), detail: 'USSD · WhatsApp · web app' },
+  { key: 'accounts', value: '0', detail: 'no registration, no install' },
+];
+---
+
+<section class="border-b border-border">
+  <div
+    class="mx-auto grid w-full max-w-[1120px] gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_400px] lg:gap-16"
+  >
+    <div class="max-w-[620px]">
+      <p class="text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
+        Early warning for the IGAD region
+      </p>
+
+      <h1 class="mt-4 text-[28px] sm:text-[32px]">
+        Satellite hazard data, translated into 10 languages and delivered to any
+        phone.
+      </h1>
+
+      <p class="mt-5 text-[15px] leading-relaxed text-muted-foreground sm:text-[16px]">
+        HALI reads {facts.sources} satellite and hazard feeds on a daily schedule, stores every
+        alert in PostGIS, and uses an ensemble of Claude, Gemini and Groq to write each
+        one in the language a household actually speaks. Every alert carries specific
+        guidance for {facts.livelihoods} livelihoods. It reaches people over USSD, WhatsApp
+        and an offline-capable web app.
+      </p>
+
+      <div class="mt-8 flex flex-wrap items-center gap-3">
+        <a
+          href={APP_URL}
+          rel="noopener"
+          class="inline-flex items-center gap-1.5 rounded-sm bg-accent px-4 py-2.5 text-[15px] text-accent-ink transition-opacity hover:opacity-90"
+        >
+          Open the app
+          <ArrowUpRight size={16} strokeWidth={1.75} />
+        </a>
+
+        <span
+          class="inline-flex items-center gap-2 rounded-sm border border-border px-3.5 py-2.5 text-[14px] text-muted-foreground"
+        >
+          Dial
+          <code class="font-mono text-[14px] text-foreground">{USSD_CODE}</code>
+          on any handset
+        </span>
+
+        {
+          WHATSAPP_URL && (
+            <a
+              href={WHATSAPP_URL}
+              rel="noopener"
+              class="inline-flex items-center gap-2 rounded-sm border border-border px-3.5 py-2.5 text-[14px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              WhatsApp
+              <code class="font-mono text-[14px] text-foreground">{WHATSAPP_NUMBER}</code>
+            </a>
+          )
+        }
+      </div>
+    </div>
+
+    <!-- System readout. Every row is checkable against the repository. -->
+    <aside class="rounded-lg border border-border bg-card">
+      <div class="flex items-center justify-between border-b border-border px-5 py-3">
+        <span class="font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+          System scope
+        </span>
+        <span class="flex items-center gap-1" aria-label="Severity bands: green, orange, red">
+          <span class="h-2 w-5 rounded-[1px] bg-sev-green"></span>
+          <span class="h-2 w-5 rounded-[1px] bg-sev-orange"></span>
+          <span class="h-2 w-5 rounded-[1px] bg-sev-red"></span>
+        </span>
+      </div>
+
+      <dl class="divide-y divide-border">
+        {
+          readout.map((row) => (
+            <div class="grid grid-cols-[88px_40px_1fr] items-baseline gap-3 px-5 py-3">
+              <dt class="font-mono text-[12px] text-muted-foreground">{row.key}</dt>
+              <dd class="tnum text-[20px] leading-none text-figure">{row.value}</dd>
+              <dd class="font-mono text-[11px] leading-snug text-muted-foreground">
+                {row.detail}
+              </dd>
+            </div>
+          ))
+        }
+      </dl>
+
+      <p class="border-t border-border px-5 py-3 font-mono text-[11px] text-muted-foreground">
+        {countries.join(', ')}
+      </p>
+    </aside>
+  </div>
+</section>

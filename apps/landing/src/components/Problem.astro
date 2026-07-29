@@ -1,0 +1,31 @@
+---
+import { problem } from '../data/site';
+---
+
+<section class="border-b border-border">
+  <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+    <h2 class="max-w-[720px] text-[20px]">
+      The data already exists. It arrives in the wrong language, with no instructions.
+    </h2>
+
+    <p class="mt-4 max-w-[720px] text-[15px] text-muted-foreground sm:text-[16px]">
+      Regional and global monitoring systems publish accurate hazard forecasts every
+      day. The failure is at the last step, between a correct forecast and a household
+      that can act on it.
+    </p>
+
+    <div class="mt-12 grid gap-10 sm:grid-cols-3 sm:gap-8">
+      {
+        problem.map((item) => (
+          <div class="border-t border-border pt-5">
+            <p class="flex items-baseline gap-2">
+              <span class="tnum text-[40px] leading-none text-figure">{item.figure}</span>
+              <span class="text-[13px] text-muted-foreground">{item.unit}</span>
+            </p>
+            <p class="mt-3 text-[14px] leading-relaxed text-muted-foreground">{item.label}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

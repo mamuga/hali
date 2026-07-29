@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* Inter, self-hosted. Two weights only — 400 body, 500 headings. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+
+/* Parity with apps/frontend — same dark-mode mechanism, same class name. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Purple — the single accent. Never a background gradient. See BRAND.md. */
+  --color-purple-100: #cecbf6;
+  --color-purple-400: #7f77dd;
+  --color-purple-600: #534ab7;
+  --color-purple-900: #26215c;
+
+  /* Severity — reused verbatim from apps/frontend/src/styles.css */
+  --color-sev-red: #dc2626;
+  --color-sev-orange: #ea580c;
+  --color-sev-green: #16a34a;
+
+  /* Steel neutrals — the app's slate ramp, unchanged */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-figure: var(--figure);
+  --color-wordmark: var(--wordmark);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+}
+
+/* Light mode — warm off-white, not pure white, not gray. */
+:root {
+  --background: #faf9f6;
+  --foreground: #0f172a;
+  --muted: #f2f0ea;
+  --muted-foreground: #64748b;
+  --card: #ffffff;
+  --border: #e5e1d8;
+  --accent: #534ab7;
+  --accent-ink: #ffffff;
+  --wordmark: #26215c;
+  --figure: #534ab7;
+}
+
+/* Dark mode — steel-blue-black, matching the HALI app. Never #000. */
+.dark {
+  --background: #0e1824;
+  --foreground: #e2e8f0;
+  --muted: #162032;
+  --muted-foreground: #94a3b8;
+  --card: #131f2e;
+  --border: #1e3448;
+  --accent: #7f77dd;
+  --accent-ink: #0e1824;
+  --wordmark: #7f77dd;
+  --figure: #7f77dd;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-sans);
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 400;
+  margin: 0;
+  min-width: 320px;
+}
+
+/* Two weights only. 400 body, 500 headings. Never 600/700. */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Data figures align in columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: #cecbf6;
+  color: #26215c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

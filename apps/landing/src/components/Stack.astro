@@ -1,0 +1,40 @@
+---
+import { ArrowUpRight } from 'lucide-react';
+import { stack } from '../data/site';
+import { GITHUB_URL } from '../config';
+---
+
+<section id="stack" class="scroll-mt-14 border-b border-border">
+  <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+    <h2 class="text-[20px]">Stack</h2>
+
+    <ul class="mt-6 flex max-w-[720px] flex-wrap gap-x-3 gap-y-2 text-[14px] text-muted-foreground">
+      {
+        stack.map((item, i) => (
+          <li class="flex items-center gap-3">
+            <span>{item}</span>
+            {i < stack.length - 1 && (
+              <span class="text-border" aria-hidden="true">
+                /
+              </span>
+            )}
+          </li>
+        ))
+      }
+    </ul>
+
+    <a
+      href={GITHUB_URL}
+      rel="noopener"
+      class="mt-8 inline-flex items-center justify-between gap-8 rounded-lg border border-border bg-card px-5 py-4 transition-colors hover:border-accent"
+    >
+      <span>
+        <span class="block text-[15px] text-foreground">mamuga/hali</span>
+        <span class="mt-0.5 block text-[13px] text-muted-foreground">
+          Backend, PWA and this site. Tests and Railway deploy run on push to main.
+        </span>
+      </span>
+      <ArrowUpRight size={20} strokeWidth={1.75} className="shrink-0 text-muted-foreground" />
+    </a>
+  </div>
+</section>

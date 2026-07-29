@@ -1,0 +1,45 @@
+---
+import { languages } from '../data/site';
+---
+
+<section class="border-b border-border">
+  <div class="mx-auto grid w-full max-w-[1120px] gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[1fr_360px] lg:gap-16">
+    <div class="max-w-[720px]">
+      <h2 class="text-[20px]">Built on ICPAC's ecosystem</h2>
+      <p class="mt-4 text-[15px] leading-relaxed text-muted-foreground sm:text-[16px]">
+        ICPAC already produces the regional science: seasonal forecasts, the SPI drought
+        index, subnational trigger thresholds and the digilib data catalogue. HALI
+        consumes that work rather than duplicating it. ICPAC WMS layers render directly
+        inside the HALI map, and the digilib SPI feed is one of the five ingestion
+        sources.
+      </p>
+      <p class="mt-4 text-[15px] leading-relaxed text-muted-foreground sm:text-[16px]">
+        What HALI adds is the last mile. It takes regional analysis and turns it into a
+        message in Afar or Luganda, with guidance specific to a pastoralist or a
+        fisherfolk household, delivered on a feature phone with no account. The
+        community reports that come back feed spatial clustering, which is where a
+        regional trigger system gets ground truth it would otherwise wait for.
+      </p>
+    </div>
+
+    <aside class="self-start rounded-lg border border-border bg-card p-5">
+      <h3 class="font-mono text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
+        Languages per alert
+      </h3>
+      <ul class="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
+        {
+          languages.map((lang) => (
+            <li class="flex items-baseline gap-2 text-[14px]">
+              <code class="font-mono text-[12px] text-figure">{lang.code}</code>
+              <span class="text-muted-foreground">{lang.name}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="mt-5 border-t border-border pt-4 text-[13px] leading-relaxed text-muted-foreground">
+        Tigrinya, Luganda and Afar are low-resource for current models. Output below the
+        clarity floor is replaced with English and marked, rather than shipped wrong.
+      </p>
+    </aside>
+  </div>
+</section>

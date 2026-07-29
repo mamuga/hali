@@ -1,0 +1,35 @@
+---
+import { pipeline } from '../data/site';
+---
+
+<section id="how-it-works" class="scroll-mt-14 border-b border-border">
+  <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+    <h2 class="text-[20px]">How it works</h2>
+    <p class="mt-4 max-w-[720px] text-[15px] text-muted-foreground sm:text-[16px]">
+      One pipeline, running unattended. A source failure isolates to that source. Loads
+      are idempotent, so the pipeline can be replayed at any time without duplicating an
+      alert.
+    </p>
+
+    <!-- Stages sit on a single connecting rule, not in boxes. -->
+    <ol class="mt-12 grid gap-0 lg:grid-cols-5">
+      {
+        pipeline.map((step, i) => (
+          <li class="relative border-t border-border pt-6 lg:pr-6">
+            <span
+              class="absolute -top-[5px] left-0 block h-[9px] w-[9px] rounded-full border border-accent bg-background"
+              aria-hidden="true"
+            />
+            <p class="tnum font-mono text-[11px] text-muted-foreground">
+              {String(i + 1).padStart(2, '0')}
+            </p>
+            <h3 class="mt-2 text-[16px]">{step.stage}</h3>
+            <p class="mt-2 max-w-[380px] pb-8 text-[14px] leading-relaxed text-muted-foreground lg:pb-0">
+              {step.detail}
+            </p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>

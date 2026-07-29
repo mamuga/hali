@@ -117,3 +117,61 @@ jobs:
           echo "## Frontend Deployed" >> $GITHUB_STEP_SUMMARY
           echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Service: frontend (Caddy + React PWA)" >> $GITHUB_STEP_SUMMARY
+
+  # ── Test landing build ──────────────────────────────────────────────────────
+  test-landing:
+    name: Landing build check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: apps/landing/package-lock.json
+
+      - name: Pin npm version
+        run: npm install -g npm@11.6.2
+
+      - name: Install deps
+        working-directory: apps/landing
+        run: npm ci
+
+      - name: Build landing
+        working-directory: apps/landing
+        env:
+          VITE_APP_URL: ${{ secrets.RAILWAY_FRONTEND_URL }}
+          VITE_GITHUB_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: npm run build
+
+      - name: Confirm build output
+        working-directory: apps/landing
+        run: |
+          ls -lh dist/
+          test -f dist/index.html && echo "index.html OK"
+
+  # ── Deploy landing to Railway ───────────────────────────────────────────────
+  deploy-landing:
+    name: Deploy landing → Railway
+    needs: [test-landing]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy landing service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service landing --environment production --detach -m "deploy ${{ github.sha }}"
+
+      - name: Deployment summary
+        run: |
+          echo "## Landing Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: landing (Caddy + Astro static)" >> $GITHUB_STEP_SUMMARY

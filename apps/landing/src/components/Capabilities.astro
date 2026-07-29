@@ -1,0 +1,24 @@
+---
+import { capabilities } from '../data/site';
+---
+
+<section id="capabilities" class="scroll-mt-14 border-b border-border">
+  <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+    <h2 class="text-[20px]">What is built</h2>
+    <p class="mt-4 max-w-[720px] text-[15px] text-muted-foreground sm:text-[16px]">
+      Taken from the capability matrix in the technical specification. Each line is
+      implemented in the repository, not planned.
+    </p>
+
+    <dl class="mt-10 border-t border-border">
+      {
+        capabilities.map((item) => (
+          <div class="grid gap-1 border-b border-border py-4 md:grid-cols-[300px_1fr] md:gap-8">
+            <dt class="text-[15px] text-foreground">{item.name}</dt>
+            <dd class="text-[14px] leading-relaxed text-muted-foreground">{item.detail}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>

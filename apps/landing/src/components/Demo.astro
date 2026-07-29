@@ -1,0 +1,23 @@
+---
+import { DEMO_VIDEO_URL } from '../config';
+---
+
+{
+  DEMO_VIDEO_URL && (
+    <section class="border-b border-border">
+      <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+        <h2 class="text-[20px]">Demo</h2>
+        <div class="mt-6 aspect-video w-full overflow-hidden rounded-lg border border-border bg-card">
+          <iframe
+            src={DEMO_VIDEO_URL}
+            title="HALI demo"
+            class="h-full w-full"
+            loading="lazy"
+            allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
+            allowfullscreen
+          />
+        </div>
+      </div>
+    </section>
+  )
+}

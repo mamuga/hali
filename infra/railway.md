@@ -11,6 +11,32 @@ Backend start command: `uvicorn hali.main:app --host 0.0.0.0 --port $PORT`.
 Frontend deploys as a static build from `npx nx run frontend:build`; set `VITE_API_URL` to the Railway backend URL before building.
 
 
+## Landing site (`landing` service)
+
+The marketing site in `apps/landing` is a third Railway service, built from the
+repository root with `apps/landing/Dockerfile` (Astro static build → Caddy),
+mirroring the `frontend` service.
+
+There is no root `railway.toml` in this repo — the backend and frontend services
+are configured through the Railway dashboard, so `landing` follows the same
+convention. The one setting it needs is supplied as a service variable rather
+than dashboard config, so it is reproducible from the CLI:
+
+```
+RAILWAY_DOCKERFILE_PATH=apps/landing/Dockerfile
+VITE_APP_URL=https://frontend-production-ba31.up.railway.app
+VITE_GITHUB_URL=https://github.com/mamuga/hali
+VITE_USSD_CODE=*789#
+VITE_DEMO_VIDEO_URL=            # unset — the demo section is omitted until set
+VITE_WHATSAPP_NUMBER=           # unset — the WhatsApp chip is omitted until set
+```
+
+All `VITE_*` values are read at build time by `apps/landing/src/config.ts` and
+inlined into the static HTML, so changing one requires a redeploy, not a restart.
+
+Deployed at `https://landing-production-d6be4.up.railway.app`. This is the URL
+to submit to Devpost, not the app URL.
+
 Current verified setup:
 
 - Workspace: `Ronza`
