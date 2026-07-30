@@ -1,6 +1,34 @@
 # HALI
 
-HALI is a hackathon-speed production-shaped early warning system for East Africa. It combines FastAPI, PostGIS, Claude processing, USSD, and a React/Vite PWA for alert feeds, maps, action cards, and community reports.
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+![CI](https://github.com/mamuga/hali/actions/workflows/deploy.yml/badge.svg)
+
+**Hyper-local early warning for East Africa.** HALI ingests 13 external hazard
+and reference sources, translates every alert into 10 languages at a Grade 5
+reading level with a multi-model AI ensemble, and delivers it over three
+channels — USSD, WhatsApp, and an offline-capable PWA — so reaching a herder
+with no smartphone and no data bundle costs nothing extra.
+
+Built for the IGAD Hackathon 2026.
+
+| | |
+|---|---|
+| **Live app (PWA)** | https://frontend-production-ba31.up.railway.app |
+| **Landing page** | https://landing-production-d6be4.up.railway.app |
+| **API** | https://backend-production-a6cf.up.railway.app |
+| **Demo video** | https://youtu.be/PvYecG0rPMk |
+
+### Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — features and technical specifications
+- [docs/SPATIAL_INTELLIGENCE.md](docs/SPATIAL_INTELLIGENCE.md) — spatial capability audit, run against the live production system
+- [docs/BRAND.md](docs/BRAND.md) — voice, and the rule that every published figure must cite a source
+- [docs/engineering-log/](docs/engineering-log/) — the as-run plans and agent prompts used to build this
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
+`apps/landing/src/data/site.ts` is the single source of truth for every count in
+this README and on the landing page. Each entry there cites the file it came
+from, and the totals are computed from the arrays rather than typed in.
 
 ## Resolved Tooling Versions
 
@@ -25,9 +53,15 @@ Python 3.13 was requested but is not installed on this machine, so local verific
 
 ## Features
 
-Languages: `sw`, `so`, `am`, `om`, `ar`, `en`. Livelihoods: `farmer`, `pastoralist`, `fisherfolk`, `urban`. Hazards: `flood`, `drought`, `locust`, `cyclone`, `health`, `other`. Severities: `green`, `orange`, `red`.
+**10 languages** — `sw` Swahili, `so` Somali, `am` Amharic, `om` Oromo, `ar` Arabic, `en` English, `fr` French, `ti` Tigrinya, `lg` Luganda, `aa` Afar. Tigrinya, Luganda, and Afar are marked low-resource; the backend may serve English where model quality is weak rather than publish a bad translation.
 
-Backend endpoints: `/`, `/health`, `/ready`, `/api/alerts`, `/api/alerts/geojson`, `/api/alerts/{alert_id}/action-card`, `/api/reports`, `/api/reports/heatmap`, `/ussd`.
+**7 livelihoods** — `farmer`, `pastoralist`, `agropastoralist`, `fisherfolk`, `urban`, `trader`, `displaced`.
+
+**10 hazard types** — `flood`, `drought`, `locust`, `cyclone`, `heatwave`, `landslide`, `wildfire`, `epidemic`, `health`, `other`. Severities: `green`, `orange`, `red`.
+
+**8 IGAD countries**, resolved to **891 admin2 district polygons** across the 6 with authoritative OCHA COD-AB geometry, with population exposure from an ingested 249,000-cell WorldPop grid.
+
+Backend routers: `health`, `alerts`, `reports`, `spatial`, `subscriptions`, `admin`, `ussd`, `whatsapp` — see `apps/backend/src/hali/routers/`.
 
 ## Local Setup
 
@@ -59,7 +93,7 @@ curl -sSL https://install.python-poetry.org | python3 -
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Clone the private repository. Use SSH if your GitHub key is configured, otherwise use HTTPS:
+Clone the repository. Use SSH if your GitHub key is configured, otherwise use HTTPS:
 
 ```bash
 git clone git@github.com:mamuga/hali.git
@@ -140,19 +174,31 @@ Troubleshooting:
 
 ## Ingestion pipeline
 
-HALI uses a typed ETL pipeline with five source adapters. Each adapter implements `BaseAdapter` (extract → validate → transform → load) and runs in an isolated APScheduler cron job so one failure never blocks others.
+HALI uses a typed ETL pipeline across **13 external sources** — 10 live and 3 one-shot reference datasets. Each adapter implements `BaseAdapter` (extract → validate → transform → load) and runs in an isolated APScheduler cron job so one failure never blocks others.
+
+`status` below is the shipped default, not an aspiration: **on** is enabled in `config.py` and scheduled, **off** means the adapter is built and tested but its flag defaults to false, **loaded** means a one-shot reference ingest already present in the database.
 
 ### Sources
 
-| Source | Auth | Schedule | Status | Signal |
-|---|---|---|---|---|
-| GDACS | None — public | 06:00 UTC | ✅ Enabled | Flood, drought, cyclone events |
-| CHIRPS | None — anonymous FTP | 07:00 UTC | ⚫ `ENABLE_CHIRPS=true` | Daily rainfall anomalies |
-| GFS | None — public NOAA | 06:15 UTC | ⚫ `ENABLE_GFS=true` | 24h extreme rainfall forecast |
-| GloFAS | Free CDS key required | 06:30 UTC | ⚫ `ENABLE_GLOFAS=true` | River discharge forecast |
-| ICPAC digilib | None — open data | 07:30 UTC | ⚫ `ENABLE_ICPAC=true` | SPI drought index |
+| Source | Kind | Auth | Schedule | Status | Signal |
+|---|---|---|---|---|---|
+| FEWS NET IPC | condition | None | Weekly, Mon 06:45 UTC | ✅ on | IPC food insecurity phase classification |
+| HDX HAPI | condition | Email in `HAPI_EMAIL` | Daily 07:10 UTC | ✅ on | Dekadal rainfall anomaly per admin2 district |
+| GDACS | event | None — public | Daily 06:00 UTC | ✅ on | Flood, drought, cyclone, wildfire events |
+| IFRC GO appeals | event | None | Daily 07:25 UTC | ✅ on | Named emergency responses, including locust |
+| WHO disease outbreak news | event | None | Daily 07:25 UTC | ✅ on | Epidemic events no satellite sees |
+| ICPAC GeoPortal WMS | map layer | None | Live tiles, per map view | ✅ on | 5 hazard layers rendered over HALI alert zones |
+| CHIRPS | physical model | None — anonymous FTP | Daily 07:00 UTC | ⚫ `ENABLE_CHIRPS=true` | Daily rainfall anomaly GeoTIFF |
+| NOAA GFS | physical model | None — public NOAA | Daily 06:15 UTC | ⚫ `ENABLE_GFS=true` | 24h extreme rainfall forecast |
+| GloFAS | physical model | Free CDS key required | Daily 06:30 UTC | ⚫ `ENABLE_GLOFAS=true` | River discharge flood forecast, GRIB2 |
+| ICPAC digilib SPI | physical model | None — open data | Daily 07:30 UTC | ⚫ `ENABLE_ICPAC=true` | Standardised precipitation index, NetCDF |
+| WorldPop population grid | reference | None | One-shot, migration 010 | 📦 loaded | 1 km 2020 UN-adjusted grid, 249,000 cells, 289,931,311 people |
+| OCHA COD-AB | reference | None | One-shot, migration 011 | 📦 loaded | 891 admin2 district polygons across 6 countries |
+| Natural Earth | reference | None | One-shot, migration 006 | 📦 loaded | 1:10m country boundaries for the 8 IGAD states |
 
-To enable CHIRPS, GFS, and ICPAC (no credentials needed):
+GloFAS and the ICPAC digilib SPI adapter are off by default. ICPAC data still reaches the map regardless: its GeoPortal WMS layers render live inside HALI, which is the stronger integration.
+
+To enable CHIRPS, GFS, and ICPAC SPI (no credentials needed):
 
 ```env
 ENABLE_CHIRPS=true
@@ -189,16 +235,23 @@ curl http://localhost:8000/api/admin/pipeline-status
 
 ```
 apps/backend/src/hali/ingestion/
-├── __init__.py        get_enabled_adapters() factory
-├── base.py            BaseAdapter ABC — shared ETL orchestration
-├── models.py          RawPayload, ValidatedAlert, NormalisedAlert, IngestionResult
-├── loader.py          PostGIS upsert, dead-letter tracking, country spatial join
-├── normaliser.py      Geometry helpers, hazard maps, threshold functions
-├── gdacs.py           GDACS REST adapter (enabled)
-├── chirps.py          CHIRPS FTP adapter (disabled by default)
-├── gfs.py             GFS NOAA adapter (disabled by default)
-├── glofas.py          GloFAS CDS adapter (disabled, needs key)
-└── icpac.py           ICPAC SPI adapter (disabled by default)
+├── __init__.py           get_enabled_adapters() factory
+├── registry.py           Adapter registry
+├── base.py               BaseAdapter ABC — shared ETL orchestration
+├── models.py             RawPayload, ValidatedAlert, NormalisedAlert, IngestionResult
+├── loader.py             PostGIS upsert, dead-letter tracking, country spatial join
+├── normaliser.py         Geometry helpers, hazard maps, threshold functions
+├── spatial_join.py       Alert-to-district P-code joins
+├── fewsnet.py            FEWS NET IPC adapter (enabled)
+├── hapi.py               HDX HAPI rainfall-anomaly adapter (enabled)
+├── gdacs.py              GDACS REST adapter (enabled)
+├── named_events.py       IFRC GO + WHO disease outbreak adapters (enabled)
+├── chirps.py             CHIRPS FTP adapter (disabled by default)
+├── gfs.py                GFS NOAA adapter (disabled by default)
+├── glofas.py             GloFAS CDS adapter (disabled, needs key)
+├── icpac.py              ICPAC SPI adapter (disabled by default)
+├── worldpop.py           WorldPop population grid (one-shot reference)
+└── admin_boundaries.py   OCHA COD-AB admin2 polygons (one-shot reference)
 ```
 
 ### Ingestion environment variables
@@ -221,7 +274,9 @@ CHIRPS_FTP_HOST=ftp.chg.ucsb.edu
 
 ### AI layer
 
-Claude translation, action-card generation, and report labels run only when `ANTHROPIC_API_KEY` is configured; otherwise reports store empty labels and adapters/tests still pass.
+Claude, Gemini, and Groq generate in parallel; a clarity scorer picks the winner against a Grade 5 reading-level floor. That covers alert translation into 10 languages, action-card generation for 7 livelihoods, and community-report labelling.
+
+The ensemble runs only when the relevant API keys are configured. Without `ANTHROPIC_API_KEY`, reports store empty labels and adapters and tests still pass, so the repository is runnable with no AI credentials at all.
 
 ## USSD
 
@@ -229,7 +284,9 @@ Configure Africa's Talking to POST to `/ussd`. The flow uses `CON` for continuin
 
 ## Data Boundaries
 
-`sql/migrations/003_seed_igad_countries.sql` uses bounding-box polygons for Kenya, Ethiopia, Somalia, Uganda, Djibouti, Eritrea, Sudan, and South Sudan. Countries are keyed by ISO2 codes: `KE`, `ET`, `SO`, `UG`, `DJ`, `ER`, `SD`, and `SS`. Replace the bounding boxes with Natural Earth boundaries using `ogr2ogr` as documented in that migration.
+Countries are keyed by ISO2 codes: `KE`, `ET`, `SO`, `UG`, `DJ`, `ER`, `SD`, and `SS`. `sql/migrations/003_seed_igad_countries.sql` originally seeded these as bounding-box polygons; `sql/migrations/006_real_country_boundaries.sql` replaced them with 1:10m Natural Earth geometry, so the shipped database holds real boundaries rather than boxes.
+
+District-level resolution comes from OCHA COD-AB admin2 polygons (migration 011), 891 districts across the 6 countries with authoritative geometry. Alerts join to districts by P-code, not by country outline.
 
 ## Database Contract
 
@@ -249,13 +306,19 @@ The current Railway database layer is configured in workspace `Ronza`, project `
 
 | Layer | Status | Detail |
 |---|---|---|
-| Database | ✅ Complete | PostgreSQL 16.14 + PostGIS 3.7 on Railway, 6 tables, 3 GiST indexes |
-| Data ingestion | ✅ Complete | 5 adapters, typed ETL, 56 GDACS alerts live in DB, 29 tests passing |
-| Claude AI layer | 🔄 Next | Translations (5 langs), action cards (4 livelihoods), NLP classifier |
-| USSD / SMS | ⏳ Pending | Africa's Talking, Swahili menu tree |
-| Frontend PWA | ⏳ Pending | React, Leaflet map, alert feed, offline cache |
-| Submission | ⏳ Pending | Demo video, Devpost write-up |
+| Database | ✅ Complete | PostgreSQL 16.14 + PostGIS 3.7 on Railway, GiST indexes in EPSG:4326 |
+| Data ingestion | ✅ Complete | 13 sources, typed ETL, dead-letter tracking, live alerts in DB |
+| AI ensemble | ✅ Complete | Claude, Gemini and Groq in parallel, clarity-scored; 10 languages, 7 livelihood action cards |
+| Spatial intelligence | ✅ Complete | 891 admin2 polygons, population exposure, compound risk, draw-polygon AOI, DBSCAN hotspots |
+| USSD / SMS | ✅ Complete | Africa's Talking, live PostGIS queries per menu step, not static text |
+| WhatsApp | ✅ Complete | Meta Cloud API, interactive messages |
+| Frontend PWA | ✅ Complete | React 19, Leaflet map, ICPAC WMS layers, Workbox offline cache and queued reports |
+| Submission | ✅ Complete | Demo video and Devpost write-up |
 
 ## Known Limitations
 
-External live ingestion quality depends on GDACS RSS content. Claude, Africa's Talking, and disabled climate/hydrology adapters require real credentials or source details before production use.
+- Live ingestion quality depends on what upstream providers publish; HALI cannot be better than its sources on a given day.
+- Djibouti and Eritrea are excluded from district-level resolution, as no authoritative COD-AB geometry or rainfall series exists for them.
+- Tigrinya, Luganda, and Afar are marked low-resource; the backend may serve English instead where model quality is weak.
+- GloFAS, CHIRPS, GFS, and the ICPAC digilib SPI adapters are built and tested but ship disabled. GloFAS additionally needs a free CDS key.
+- The AI layer runs only when `ANTHROPIC_API_KEY` is configured; without it, reports store empty labels and adapters and tests still pass.

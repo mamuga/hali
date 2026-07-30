@@ -114,9 +114,9 @@ colored circle badge — that reads as decoration, not information.
 | 891 admin2 districts | `apps/backend/src/hali/ingestion/admin_boundaries.py`, migration 011 |
 | 289,931,311 population | `apps/backend/src/hali/ingestion/worldpop.py`, migration 010 |
 | AI ensemble models | `.env.example` — `AI_PRIMARY_MODEL`, Gemini, Groq |
-| Capability matrix | `HALI_FEATURES_TECHNICAL_SPECS.md` §13.1 |
+| Capability matrix | `docs/ARCHITECTURE.md` §13.1 |
 
-`HALI_FEATURES_TECHNICAL_SPECS.md` §2.2 has not been regenerated since the
+`docs/ARCHITECTURE.md` §2.2 has not been regenerated since the
 HAPI, FEWS NET, IFRC and WHO adapters landed and still lists the original 5.
 Where the spec and the code disagree, cite the code.
 

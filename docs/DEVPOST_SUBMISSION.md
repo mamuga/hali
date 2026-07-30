@@ -255,7 +255,7 @@ This field is NOT public — use it for depth without bloating the public
 story. Zip and upload:
 
 ```
-HALI_FEATURES_TECHNICAL_SPECS.md   (the full 13-section spec doc)
+docs/ARCHITECTURE.md   (the full 13-section spec doc)
 architecture-diagram.png           (export from your pipeline diagram)
 spatial-intelligence-audit.md      (the 8-capability verification table)
 ```

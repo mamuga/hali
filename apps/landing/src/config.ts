@@ -23,7 +23,7 @@ export const DEMO_VIDEO_URL = DEMO_VIDEO_ID
 
 /**
  * Africa's Talking USSD service code. The sandbox channel is live and its
- * callback points at the deployed backend — HALI_FEATURES_TECHNICAL_SPECS.md §5.1.
+ * callback points at the deployed backend — docs/ARCHITECTURE.md §5.1.
  */
 export const USSD_CODE = env.VITE_USSD_CODE || '*384*97980#';
 

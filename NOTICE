@@ -1,0 +1,49 @@
+HALI — Hyper-local early warning for East Africa
+Copyright 2026 Martin Muga and Mary Ndung'u
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------------------
+
+This product ingests and redistributes data from third-party sources, each
+under its own terms. HALI claims no ownership of that data. Attribution as
+required by each provider:
+
+  GDACS — Global Disaster Alert and Coordination System, a cooperation
+  between the United Nations and the European Commission.
+
+  FEWS NET — Famine Early Warning Systems Network, USAID.
+
+  HDX HAPI — Humanitarian Data Exchange, UN OCHA. Licensed per dataset.
+
+  IFRC GO — International Federation of Red Cross and Red Crescent
+  Societies.
+
+  WHO Disease Outbreak News — World Health Organization.
+
+  ICPAC — IGAD Climate Prediction and Applications Centre. GeoPortal WMS
+  layers are served live from ICPAC's own infrastructure.
+
+  CHIRPS — Climate Hazards Center, UC Santa Barbara.
+
+  NOAA GFS — National Oceanic and Atmospheric Administration.
+
+  GloFAS — Global Flood Awareness System, Copernicus Emergency Management
+  Service. Contains modified Copernicus Climate Change Service information.
+
+  WorldPop — WorldPop, University of Southampton. Licensed CC BY 4.0.
+
+  OCHA COD-AB — Common Operational Datasets, administrative boundaries,
+  UN OCHA.
+
+  Natural Earth — public domain, naturalearthdata.com.

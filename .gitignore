@@ -1,22 +1,59 @@
-node_modules/
-dist/
-tmp/
+# Environments
 .env
+.env.local
 .env.*
 !.env.example
-.venv/
+
+# Python
 __pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
-.DS_Store
-.nx/cache/
 coverage/
-reports/
+
+# Node
+node_modules/
+dist/
+tmp/
 .nx/
+.nx/cache/
+.vite/
+reports/
 
 # TypeScript build artifacts
 *.tsbuildinfo
 packages/types/src/*.d.ts
 packages/types/src/*.d.ts.map
+
+# Video/media artifacts (generated, not source)
+demo/raw/
+demo/clips/
+demo/music/
+*.mp4
+*.webm
+*.mov
+!demo/EDIT_GUIDE.md
+!demo/*.py
+!demo/*.js
+!demo/*.sh
+!demo/capture/*.mjs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Packaged/private submission artifacts, not for the public repo
+judge-packet/
+judge-packet-src/
+*.zip
+
+# One-off scratch capture script
+_shot.mjs

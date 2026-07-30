@@ -1,6 +1,6 @@
 /**
- * Every figure here is traceable to the repository or HALI_FEATURES_TECHNICAL_SPECS.md.
- * See BRAND.md → "Source of truth for facts". Do not add a number without a source.
+ * Every figure here is traceable to the repository or docs/ARCHITECTURE.md.
+ * See docs/BRAND.md → "Source of truth for facts". Do not add a number without a source.
  *
  * Note on §2.2: the specs table still lists the original 5 adapters and has not
  * been regenerated since the HAPI, FEWS NET, IFRC and WHO adapters landed. Where
@@ -181,15 +181,15 @@ export const facts = {
   sources: sources.length,
   liveSources: sources.filter((s) => s.kind !== 'reference').length,
   referenceDatasets: sources.filter((s) => s.kind === 'reference').length,
-  districts: 891, // HALI_FINAL_SPRINT_PLAN.md §Phase 6 — COD-AB admin2 polygons, 6 countries
-  population: 289_931_311, // HALI_FINAL_SPRINT_PLAN.md §Phase 5 — WorldPop 2020 UN-adjusted grid total
-  popGridCells: 249_000, // HALI_FINAL_SPRINT_PLAN.md §Phase 5 — pop_grid rows, all 8 countries
+  districts: 891, // docs/engineering-log/HALI_FINAL_SPRINT_PLAN.md §Phase 6 — COD-AB admin2 polygons, 6 countries
+  population: 289_931_311, // docs/engineering-log/HALI_FINAL_SPRINT_PLAN.md §Phase 5 — WorldPop 2020 UN-adjusted grid total
+  popGridCells: 249_000, // docs/engineering-log/HALI_FINAL_SPRINT_PLAN.md §Phase 5 — pop_grid rows, all 8 countries
   channels: 3, // USSD, WhatsApp, PWA
 };
 
 /**
  * The gap HALI addresses, stated only in terms this repository can back up.
- * No external statistics — BRAND.md forbids publishing figures we cannot source.
+ * No external statistics — docs/BRAND.md forbids publishing figures we cannot source.
  */
 export const problem = [
   {
