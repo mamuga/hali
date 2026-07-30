@@ -5,20 +5,27 @@
  * Set on Railway:
  *   VITE_APP_URL         — the deployed HALI PWA
  *   VITE_GITHUB_URL      — the repository
- *   VITE_DEMO_VIDEO_URL  — embed URL. Unset means the demo section is omitted.
+ *   VITE_DEMO_VIDEO_ID   — YouTube id. Set it empty to omit the demo section.
  */
 const env = process.env;
 
 export const APP_URL =
   env.VITE_APP_URL || 'https://frontend-production-ba31.up.railway.app';
 
-export const GITHUB_URL = env.VITE_GITHUB_URL || 'https://github.com/mamuga/hali';
+export const GITHUB_URL =
+  env.VITE_GITHUB_URL || 'https://github.com/mamuga/hali';
 
-/** Empty means "no video yet" — the section is not rendered at all. */
-export const DEMO_VIDEO_URL = (env.VITE_DEMO_VIDEO_URL || '').trim();
+/** The recorded product demo. Empty means the section is not rendered at all. */
+export const DEMO_VIDEO_ID = (env.VITE_DEMO_VIDEO_ID || 'PvYecG0rPMk').trim();
+export const DEMO_VIDEO_URL = DEMO_VIDEO_ID
+  ? `https://www.youtube.com/embed/${DEMO_VIDEO_ID}`
+  : '';
 
-/** Africa's Talking USSD service code (apps/backend/tests/test_ussd.py). */
-export const USSD_CODE = env.VITE_USSD_CODE || '*789#';
+/**
+ * Africa's Talking USSD service code. The sandbox channel is live and its
+ * callback points at the deployed backend — HALI_FEATURES_TECHNICAL_SPECS.md §5.1.
+ */
+export const USSD_CODE = env.VITE_USSD_CODE || '*384*97980#';
 
 /** WhatsApp Cloud API number. Empty means the chip is not rendered. */
 export const WHATSAPP_NUMBER = (env.VITE_WHATSAPP_NUMBER || '').trim();

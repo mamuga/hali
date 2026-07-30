@@ -1,0 +1,56 @@
+---
+import Shot from './Shot.astro';
+import { sources, facts } from '../data/site';
+import { ipcFoodInsecurity } from '../data/shots';
+
+const statusLabel: Record<string, string> = {
+  on: 'live',
+  off: 'built, off',
+  loaded: 'loaded',
+};
+---
+
+<section id="sources" class="scroll-mt-14 border-b border-border">
+  <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
+    <h2 class="text-[20px]">Where the data comes from</h2>
+    <p class="mt-4 max-w-[720px] text-[15px] text-muted-foreground sm:text-[16px]">
+      {facts.sources} external sources. {facts.liveSources} run live, on independent schedules,
+      and {facts.referenceDatasets} are reference datasets ingested once and held in the
+      database, including a {facts.popGridCells.toLocaleString('en-US')}-cell population grid
+      covering {facts.population.toLocaleString('en-US')} people. Four adapters are written and
+      tested but shipped with their flag off. They are listed as off rather than counted as
+      running.
+    </p>
+
+    <div class="mt-10 grid gap-10 lg:grid-cols-[1fr_400px] lg:gap-12">
+      <dl class="border-t border-border">
+        {
+          sources.map((s) => (
+            <div class="grid gap-1 border-b border-border py-4 sm:grid-cols-[200px_1fr_92px] sm:gap-6">
+              <dt class="text-[15px] text-foreground">{s.name}</dt>
+              <dd class="text-[14px] leading-relaxed text-muted-foreground">
+                {s.signal}
+                <span class="mt-1 block font-mono text-[12px]">
+                  {s.endpoint} · {s.schedule}
+                </span>
+              </dd>
+              <dd class="font-mono text-[12px] text-muted-foreground sm:text-right">
+                {statusLabel[s.status]}
+              </dd>
+            </div>
+          ))
+        }
+      </dl>
+
+      <!-- Sits with the FEWS NET row above, which is the source it shows. -->
+      <div class="lg:sticky lg:top-20 lg:self-start">
+        <Shot
+          src={ipcFoodInsecurity}
+          alt="HALI map showing FEWS NET IPC food insecurity phase classification across the region."
+          caption="FEWS NET IPC phase classification, rendered from the ingested package. Captured live."
+          width={400}
+        />
+      </div>
+    </div>
+  </div>
+</section>

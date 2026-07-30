@@ -1,0 +1,37 @@
+---
+/**
+ * A screenshot with its caption. One hairline border, no shadow, no glow.
+ * The caption is part of the claim, not decoration — it says what the image
+ * proves and, where it matters, that it was captured against the live service.
+ */
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  caption: string;
+  /** Rendered width in CSS pixels at the largest breakpoint. */
+  width?: number;
+  class?: string;
+}
+
+const { src, alt, caption, width = 640, class: className = '' } = Astro.props;
+---
+
+<figure class={`m-0 ${className}`}>
+  <div class="overflow-hidden rounded-sm border border-border bg-card">
+    <Image
+      src={src}
+      alt={alt}
+      widths={[width, width * 2]}
+      sizes={`(max-width: 720px) 100vw, ${width}px`}
+      loading="lazy"
+      decoding="async"
+      class="block h-auto w-full"
+    />
+  </div>
+  <figcaption class="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">
+    {caption}
+  </figcaption>
+</figure>

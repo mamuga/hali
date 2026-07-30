@@ -6,8 +6,9 @@ Direction B — technical, steel dark, purple as a data accent.
 ## What HALI is
 
 HALI is a hyper-local early warning system for the eight IGAD member states.
-It ingests satellite and hazard data from five sources on a daily schedule,
-normalises it through a PostGIS spatial database, translates each alert into
+It ingests satellite, food security and outbreak data from 13 external sources
+on independent schedules, resolves each alert to one of 891 admin2 districts in
+a PostGIS spatial database, translates it into
 10 languages with a multi-model AI ensemble, and generates livelihood-specific
 action guidance. Alerts reach people over USSD, WhatsApp and an offline-capable
 web app. There is no account, no subscription and no app install.
@@ -108,9 +109,16 @@ colored circle badge — that reads as decoration, not information.
 | 7 livelihoods | `packages/types/src/index.ts` — `Livelihood` union |
 | 10 hazard types | `packages/types/src/index.ts` — `HazardType` union |
 | 8 IGAD countries | `infra/railway.md` — seed ISO2 codes |
-| 5 ingestion sources | `HALI_FEATURES_TECHNICAL_SPECS.md` §2.2 |
+| 13 external sources | `apps/landing/src/data/site.ts` — `sources[]`, one file cited per entry |
+| 10 live / 3 reference | same array — `kind: 'reference'` marks the one-shot ingests |
+| 891 admin2 districts | `apps/backend/src/hali/ingestion/admin_boundaries.py`, migration 011 |
+| 289,931,311 population | `apps/backend/src/hali/ingestion/worldpop.py`, migration 010 |
 | AI ensemble models | `.env.example` — `AI_PRIMARY_MODEL`, Gemini, Groq |
 | Capability matrix | `HALI_FEATURES_TECHNICAL_SPECS.md` §13.1 |
+
+`HALI_FEATURES_TECHNICAL_SPECS.md` §2.2 has not been regenerated since the
+HAPI, FEWS NET, IFRC and WHO adapters landed and still lists the original 5.
+Where the spec and the code disagree, cite the code.
 
 If a number is not in that table, it does not go on the site until a
 source exists for it.

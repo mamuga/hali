@@ -1,5 +1,37 @@
 ---
-import { pipeline } from '../data/site';
+import type { ImageMetadata } from 'astro';
+import Shot from './Shot.astro';
+import { pipeline, facts } from '../data/site';
+import { architecture, alertSwahili, districtChoropleth, ussdMenu } from '../data/shots';
+
+/**
+ * One screenshot per stage where a real capture exists. The ETL stage has no
+ * screenshot because none was captured for it, and a decorative stand-in would
+ * be the opposite of the point.
+ */
+const shots: Record<number, { src: ImageMetadata; alt: string; caption: string }> = {
+  0: {
+    src: architecture,
+    alt: 'HALI architecture diagram: 13 data sources feeding the ingestion layer, then AI processing, PostGIS and the delivery channels.',
+    caption:
+      'All 13 sources feeding one ETL. Diagram drawn from the implemented stack, not a screenshot.',
+  },
+  2: {
+    src: alertSwahili,
+    alt: 'A HALI alert rendered in Swahili with its translated action guidance.',
+    caption: 'The same alert after the ensemble, in Swahili. Captured live.',
+  },
+  3: {
+    src: districtChoropleth,
+    alt: 'HALI map showing district-level polygons shaded by severity across the IGAD region.',
+    caption: `${facts.districts} admin2 districts, not 8 country outlines. Captured live.`,
+  },
+  4: {
+    src: ussdMenu,
+    alt: "Africa's Talking sandbox simulator showing the HALI USSD main menu.",
+    caption: "Live USSD session on *384*97980#, Africa's Talking sandbox simulator.",
+  },
+};
 ---
 
 <section id="how-it-works" class="scroll-mt-14 border-b border-border">
@@ -12,23 +44,28 @@ import { pipeline } from '../data/site';
     </p>
 
     <!-- Stages sit on a single connecting rule, not in boxes. -->
-    <ol class="mt-12 grid gap-0 lg:grid-cols-5">
+    <ol class="mt-12">
       {
-        pipeline.map((step, i) => (
-          <li class="relative border-t border-border pt-6 lg:pr-6">
-            <span
-              class="absolute -top-[5px] left-0 block h-[9px] w-[9px] rounded-full border border-accent bg-background"
-              aria-hidden="true"
-            />
-            <p class="tnum font-mono text-[11px] text-muted-foreground">
-              {String(i + 1).padStart(2, '0')}
-            </p>
-            <h3 class="mt-2 text-[16px]">{step.stage}</h3>
-            <p class="mt-2 max-w-[380px] pb-8 text-[14px] leading-relaxed text-muted-foreground lg:pb-0">
-              {step.detail}
-            </p>
-          </li>
-        ))
+        pipeline.map((step, i) => {
+          const shot = shots[i];
+          return (
+            <li class="relative grid gap-6 border-t border-border py-8 lg:grid-cols-[1fr_440px] lg:gap-12">
+              <span
+                class="absolute -top-[5px] left-0 block h-[9px] w-[9px] rounded-full border border-accent bg-background"
+                aria-hidden="true"
+              />
+              <div class="max-w-[560px]">
+                <p class="tnum font-mono text-[11px] text-muted-foreground">
+                  {String(i + 1).padStart(2, '0')}
+                </p>
+                <h3 class="mt-2 text-[16px]">{step.stage}</h3>
+                <p class="mt-2 text-[14px] leading-relaxed text-muted-foreground">{step.detail}</p>
+              </div>
+
+              {shot && <Shot src={shot.src} alt={shot.alt} caption={shot.caption} width={440} />}
+            </li>
+          );
+        })
       }
     </ol>
   </div>

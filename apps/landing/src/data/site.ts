@@ -1,16 +1,11 @@
 /**
  * Every figure here is traceable to the repository or HALI_FEATURES_TECHNICAL_SPECS.md.
  * See BRAND.md → "Source of truth for facts". Do not add a number without a source.
+ *
+ * Note on §2.2: the specs table still lists the original 5 adapters and has not
+ * been regenerated since the HAPI, FEWS NET, IFRC and WHO adapters landed. Where
+ * the spec and the code disagree, the code wins and is cited directly.
  */
-
-export const facts = {
-  languages: 10, // packages/types/src/index.ts — Language union
-  livelihoods: 7, // packages/types/src/index.ts — Livelihood union
-  hazards: 10, // packages/types/src/index.ts — HazardType union
-  countries: 8, // infra/railway.md — IGAD seed ISO2 codes
-  sources: 5, // specs §2.2
-  channels: 3, // USSD, WhatsApp, PWA
-};
 
 /** packages/types/src/index.ts — Language union, in the order declared. */
 export const languages = [
@@ -39,6 +34,160 @@ export const countries = [
 ];
 
 /**
+ * The 13 external data sources wired in this repository, each traced to the file
+ * that calls it. `status` is the shipped default, not an aspiration:
+ *
+ *   on      — enabled in apps/backend/src/hali/config.py and scheduled
+ *   off     — adapter is built and tested, flag defaults to false
+ *   loaded  — one-shot reference ingest, already in the Railway database
+ *
+ * GloFAS and the ICPAC digilib SPI adapter are off. ICPAC's data still reaches
+ * the map: its GeoPortal WMS layers render live inside HALI, which is the real
+ * integration and a stronger claim than an alert adapter that is not running.
+ */
+export const sources = [
+  {
+    name: 'FEWS NET IPC',
+    kind: 'condition',
+    endpoint: 'fdw.fews.net/api/ipcpackage',
+    signal: 'IPC food insecurity phase classification',
+    schedule: 'Weekly, Monday 06:45 UTC',
+    status: 'on',
+    source: 'apps/backend/src/hali/ingestion/fewsnet.py',
+  },
+  {
+    name: 'HDX HAPI',
+    kind: 'condition',
+    endpoint: 'hapi.humdata.org/api/v2',
+    signal: 'dekadal rainfall anomaly per admin2 district',
+    schedule: 'Daily 07:10 UTC',
+    status: 'on',
+    source: 'apps/backend/src/hali/ingestion/hapi.py',
+  },
+  {
+    name: 'GDACS',
+    kind: 'event',
+    endpoint: 'gdacs.org/gdacsapi',
+    signal: 'flood, drought, cyclone and wildfire events',
+    schedule: 'Daily 06:00 UTC',
+    status: 'on',
+    source: 'apps/backend/src/hali/ingestion/gdacs.py',
+  },
+  {
+    name: 'IFRC GO appeals',
+    kind: 'event',
+    endpoint: 'goadmin.ifrc.org/api/v2/appeal',
+    signal: 'named emergency responses, including locust',
+    schedule: 'Daily 07:25 UTC',
+    status: 'on',
+    source: 'apps/backend/src/hali/ingestion/named_events.py',
+  },
+  {
+    name: 'WHO disease outbreak news',
+    kind: 'event',
+    endpoint: 'who.int/api/news/diseaseoutbreaknews',
+    signal: 'epidemic events no satellite sees',
+    schedule: 'Daily 07:25 UTC',
+    status: 'on',
+    source: 'apps/backend/src/hali/ingestion/named_events.py',
+  },
+  {
+    name: 'ICPAC GeoPortal WMS',
+    kind: 'map layer',
+    endpoint: 'geoportal.icpac.net/geoserver/wms',
+    signal:
+      '5 layers: flood prone, drought prone, drought hazard index, desert locust hazard, multi-hazard risk',
+    schedule: 'Live tiles, per map view',
+    status: 'on',
+    source: 'apps/frontend/src/lib/icpacLayers.ts',
+  },
+  {
+    name: 'CHIRPS',
+    kind: 'physical model',
+    endpoint: 'ftp.chg.ucsb.edu',
+    signal: 'daily rainfall anomaly GeoTIFF',
+    schedule: 'Daily 07:00 UTC',
+    status: 'off',
+    source: 'apps/backend/src/hali/ingestion/chirps.py',
+  },
+  {
+    name: 'NOAA GFS',
+    kind: 'physical model',
+    endpoint: 'ftp.cpc.ncep.noaa.gov/GIS/gfs_0.25',
+    signal: '24h extreme rainfall forecast',
+    schedule: 'Daily 06:15 UTC',
+    status: 'off',
+    source: 'apps/backend/src/hali/ingestion/gfs.py',
+  },
+  {
+    name: 'GloFAS',
+    kind: 'physical model',
+    endpoint: 'cds.climate.copernicus.eu',
+    signal: 'river discharge flood forecast, GRIB2',
+    schedule: 'Daily 06:30 UTC',
+    status: 'off',
+    source: 'apps/backend/src/hali/ingestion/glofas.py',
+  },
+  {
+    name: 'ICPAC digilib SPI',
+    kind: 'physical model',
+    endpoint: 'digilib.icpac.net',
+    signal: 'standardised precipitation index, NetCDF',
+    schedule: 'Daily 07:30 UTC',
+    status: 'off',
+    source: 'apps/backend/src/hali/ingestion/icpac.py',
+  },
+  {
+    name: 'WorldPop population grid',
+    kind: 'reference',
+    endpoint: 'data.worldpop.org',
+    signal: '1km 2020 UN-adjusted grid, 249,000 cells, 289,931,311 people',
+    schedule: 'One-shot ingest, migration 010',
+    status: 'loaded',
+    source: 'apps/backend/src/hali/ingestion/worldpop.py',
+  },
+  {
+    name: 'OCHA COD-AB',
+    kind: 'reference',
+    endpoint: 'data.humdata.org CKAN',
+    signal: '891 admin2 district polygons across 6 countries',
+    schedule: 'One-shot ingest, migration 011',
+    status: 'loaded',
+    source: 'apps/backend/src/hali/ingestion/admin_boundaries.py',
+  },
+  {
+    name: 'Natural Earth',
+    kind: 'reference',
+    endpoint: 'github.com/nvkelso/natural-earth-vector',
+    signal:
+      '1:10m country boundaries for the 8 IGAD states, real geometry not bounding boxes',
+    schedule: 'One-shot ingest, migration 006',
+    status: 'loaded',
+    source: 'sql/migrations/006_real_country_boundaries.sql',
+  },
+];
+
+/**
+ * The source counts are derived, not typed in. This file previously carried a
+ * hand-written `sources: 5` that stayed at 5 for eight more adapters, which is
+ * exactly the failure the header rule exists to prevent. Add a source to the
+ * array above and every count on the page follows.
+ */
+export const facts = {
+  languages: 10, // packages/types/src/index.ts — Language union
+  livelihoods: 7, // packages/types/src/index.ts — Livelihood union
+  hazards: 10, // packages/types/src/index.ts — HazardType union
+  countries: 8, // infra/railway.md — IGAD seed ISO2 codes
+  sources: sources.length,
+  liveSources: sources.filter((s) => s.kind !== 'reference').length,
+  referenceDatasets: sources.filter((s) => s.kind === 'reference').length,
+  districts: 891, // HALI_FINAL_SPRINT_PLAN.md §Phase 6 — COD-AB admin2 polygons, 6 countries
+  population: 289_931_311, // HALI_FINAL_SPRINT_PLAN.md §Phase 5 — WorldPop 2020 UN-adjusted grid total
+  popGridCells: 249_000, // HALI_FINAL_SPRINT_PLAN.md §Phase 5 — pop_grid rows, all 8 countries
+  channels: 3, // USSD, WhatsApp, PWA
+};
+
+/**
  * The gap HALI addresses, stated only in terms this repository can back up.
  * No external statistics — BRAND.md forbids publishing figures we cannot source.
  */
@@ -63,17 +212,17 @@ export const problem = [
   },
 ];
 
-/** specs §2.2 and §3.1 — the real pipeline, stage by stage. */
+/** The real pipeline, stage by stage. Sources per stage cited inline. */
 export const pipeline = [
   {
-    stage: '5 satellite sources',
+    stage: `${facts.sources} external sources`,
     detail:
-      'GDACS REST, CHIRPS FTP, GFS NOAA, GloFAS CDS, ICPAC digilib. Fetched on a daily schedule from 06:00 UTC.',
+      'FEWS NET IPC, HDX HAPI, GDACS, IFRC GO and WHO run on independent schedules. CHIRPS, GFS, GloFAS and ICPAC SPI are built and flag-gated. Three reference datasets sit underneath, ingested once.',
   },
   {
     stage: 'Automated ETL',
     detail:
-      'Extract, validate, transform, load. Pydantic boundary checks, MD5 dedup_hash with ON CONFLICT DO NOTHING, dead-letter tracking on every raw record.',
+      'Extract, validate, transform, load. Pydantic boundary checks, MD5 dedup_hash with ON CONFLICT DO NOTHING, dead-letter tracking on every raw record. One adapter failing never blocks another.',
   },
   {
     stage: 'AI ensemble',
@@ -82,8 +231,7 @@ export const pipeline = [
   },
   {
     stage: 'PostGIS',
-    detail:
-      'PostgreSQL 16 with PostGIS 3.7. GiST indexes on alert zones, community reports and country geometry in EPSG:4326.',
+    detail: `PostgreSQL 16 with PostGIS 3.7. Alerts land on ${facts.districts} admin2 district polygons by P-code join, not country outlines. GiST indexes on zones, reports and geometry in EPSG:4326.`,
   },
   {
     stage: 'USSD / WhatsApp / PWA',
@@ -93,8 +241,9 @@ export const pipeline = [
 ];
 
 /**
- * specs §13.1, filtered to what is built and verifiable. Wording follows the
- * spec table; nothing new is claimed here.
+ * specs §13.1, filtered to what is built and verifiable in the repository.
+ * Rows marked "Designed" in the spec table are included only where the code
+ * now exists; the file cited is the one that implements it.
  */
 export const capabilities = [
   {
@@ -103,11 +252,16 @@ export const capabilities = [
   },
   {
     name: 'Automated multi-source ingestion',
-    detail: 'GDACS, CHIRPS, GFS, GloFAS and ICPAC, with no human in the loop.',
+    detail: `${facts.sources} external sources, ${facts.liveSources} live and ${facts.referenceDatasets} one-shot reference datasets, with no human in the loop.`,
+  },
+  {
+    name: 'District-level resolution',
+    detail: `${facts.districts} OCHA COD-AB admin2 polygons across 6 countries. Djibouti and Eritrea are left out where no authoritative geometry or rainfall series exists.`,
   },
   {
     name: 'Multi-model AI ensemble',
-    detail: 'Claude, Gemini and Groq outputs scored for clarity before publication.',
+    detail:
+      'Claude, Gemini and Groq outputs scored for clarity before publication.',
   },
   {
     name: 'AI multilingual translation',
@@ -122,12 +276,34 @@ export const capabilities = [
     detail: 'Long rains, short rains and dry season framing on every alert.',
   },
   {
+    name: 'Compound risk index',
+    detail:
+      'PostGIS scoring per country and district, served from /api/spatial/compound-risk.',
+  },
+  {
+    name: 'Population exposure per alert',
+    detail:
+      'Zonal statistics against an ingested 249,000-cell WorldPop grid, 0.17 ms server-side, not a per-call external lookup.',
+  },
+  {
+    name: 'Draw-polygon area query',
+    detail:
+      'Draw any shape on the map and get every alert, community report, hotspot and the population inside it.',
+  },
+  {
     name: 'Community ground truth to severity',
-    detail: 'Claude reads inbound reports and upgrades an alert when they agree.',
+    detail:
+      'Claude reads inbound reports and upgrades an alert when they agree.',
   },
   {
     name: 'DBSCAN emerging hotspot detection',
-    detail: 'Clusters community reports to surface events before official alerts.',
+    detail:
+      'Clusters community reports every 30 minutes to surface events before official alerts.',
+  },
+  {
+    name: 'ICPAC WMS layers in the map',
+    detail:
+      "5 layers from ICPAC's own GeoPortal, composited over HALI alert zones.",
   },
   {
     name: 'Spatial subscriber targeting',
@@ -158,10 +334,12 @@ export const stack = [
   'Claude',
   'Gemini',
   'Groq',
+  'scikit-learn',
   'React 19',
   'Vite',
   'Tailwind v4',
   'Leaflet',
+  'Astro',
   "Africa's Talking",
   'WhatsApp Cloud API',
   'Railway',

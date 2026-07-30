@@ -1,23 +1,104 @@
 ---
+import type { ImageMetadata } from 'astro';
+import Shot from './Shot.astro';
 import { capabilities } from '../data/site';
+import {
+  adminAiStats,
+  languageDropdown,
+  actionCards,
+  compoundRisk,
+  aoiPolygon,
+  emergingHotspot,
+  icpacWms,
+} from '../data/shots';
+
+/**
+ * Keyed on the capability name so a row and its evidence cannot drift apart.
+ * A capability with no captured screenshot simply has none — the list is not
+ * padded out to look even.
+ */
+const evidence: Record<
+  string,
+  { src: ImageMetadata; alt: string; caption: string; width: number }
+> = {
+  'Multi-model AI ensemble': {
+    src: adminAiStats,
+    alt: 'Admin AI stats endpoint response showing call counts per provider.',
+    caption:
+      '/api/admin/ai-stats, showing real call counts per provider. The ensemble is measured, not asserted.',
+    width: 520,
+  },
+  'AI multilingual translation': {
+    src: languageDropdown,
+    alt: 'HALI language selector open, showing all 10 supported languages.',
+    caption: 'All 10 languages in the selector, including Tigrinya, Luganda and Afar.',
+    width: 520,
+  },
+  'Livelihood-specific action cards': {
+    src: actionCards,
+    alt: 'Three action cards for the same alert, for a farmer, a pastoralist and a displaced household.',
+    caption: 'One alert, three livelihoods: farmer, pastoralist, displaced household.',
+    width: 640,
+  },
+  'Compound risk index': {
+    src: compoundRisk,
+    alt: 'Compound risk choropleth with a ranked panel of country and district scores.',
+    caption: 'Compound risk choropleth with the ranked panel open.',
+    width: 520,
+  },
+  'Draw-polygon area query': {
+    src: aoiPolygon,
+    alt: 'A polygon drawn on the HALI map with a panel listing alerts, reports, hotspots and population inside it.',
+    caption: 'A drawn area returning alerts, 7 reports, 1 hotspot and its population.',
+    width: 640,
+  },
+  'DBSCAN emerging hotspot detection': {
+    src: emergingHotspot,
+    alt: 'Map popup for an emerging hotspot clustered from six community reports, marked as having no official alert.',
+    caption:
+      'Six community reports clustered into a wildfire hotspot with no matching official alert. Detected by the scheduled DBSCAN job, captured live.',
+    width: 900,
+  },
+  'ICPAC WMS layers in the map': {
+    src: icpacWms,
+    alt: "HALI alert zones composited with ICPAC's flood-prone WMS layer.",
+    caption: "HALI alert zones over ICPAC's own flood-prone layer, served from their GeoPortal.",
+    width: 520,
+  },
+};
 ---
 
 <section id="capabilities" class="scroll-mt-14 border-b border-border">
   <div class="mx-auto w-full max-w-[1120px] px-5 py-16 sm:px-8">
-    <h2 class="text-[20px]">What is built</h2>
+    <h2 class="text-[20px]">What makes HALI different</h2>
     <p class="mt-4 max-w-[720px] text-[15px] text-muted-foreground sm:text-[16px]">
-      Taken from the capability matrix in the technical specification. Each line is
-      implemented in the repository, not planned.
+      Taken from the capability matrix in the technical specification, filtered to what
+      the repository actually implements. Where a capability has a screenshot, it was
+      captured against the live deployment.
     </p>
 
     <dl class="mt-10 border-t border-border">
       {
-        capabilities.map((item) => (
-          <div class="grid gap-1 border-b border-border py-4 md:grid-cols-[300px_1fr] md:gap-8">
-            <dt class="text-[15px] text-foreground">{item.name}</dt>
-            <dd class="text-[14px] leading-relaxed text-muted-foreground">{item.detail}</dd>
-          </div>
-        ))
+        capabilities.map((item) => {
+          const shot = evidence[item.name];
+          return (
+            <div class="grid gap-1 border-b border-border py-5 md:grid-cols-[300px_1fr] md:gap-8">
+              <dt class="text-[15px] text-foreground">{item.name}</dt>
+              <dd class="text-[14px] leading-relaxed text-muted-foreground">
+                {item.detail}
+                {shot && (
+                  <Shot
+                    src={shot.src}
+                    alt={shot.alt}
+                    caption={shot.caption}
+                    width={shot.width}
+                    class={`mt-5 ${shot.width >= 900 ? '' : 'max-w-[640px]'}`}
+                  />
+                )}
+              </dd>
+            </div>
+          );
+        })
       }
     </dl>
   </div>

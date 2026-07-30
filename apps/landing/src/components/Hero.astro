@@ -7,12 +7,17 @@ const readout = [
   {
     key: 'sources',
     value: String(facts.sources),
-    detail: 'GDACS · CHIRPS · GFS · GloFAS · ICPAC',
+    detail: `${facts.liveSources} live feeds · ${facts.referenceDatasets} reference sets`,
   },
   {
     key: 'languages',
     value: String(facts.languages),
     detail: languages.map((l) => l.code).join(' '),
+  },
+  {
+    key: 'districts',
+    value: String(facts.districts),
+    detail: 'OCHA COD-AB admin2 polygons',
   },
   {
     key: 'countries',
@@ -34,16 +39,16 @@ const readout = [
       </p>
 
       <h1 class="mt-4 text-[28px] sm:text-[32px]">
-        Satellite hazard data, translated into 10 languages and delivered to any
-        phone.
+        Hazard data from {facts.sources} sources, translated into {facts.languages} languages
+        and delivered to any phone.
       </h1>
 
       <p class="mt-5 text-[15px] leading-relaxed text-muted-foreground sm:text-[16px]">
-        HALI reads {facts.sources} satellite and hazard feeds on a daily schedule, stores every
-        alert in PostGIS, and uses an ensemble of Claude, Gemini and Groq to write each
-        one in the language a household actually speaks. Every alert carries specific
-        guidance for {facts.livelihoods} livelihoods. It reaches people over USSD, WhatsApp
-        and an offline-capable web app.
+        HALI ingests satellite, food security and outbreak data on independent schedules,
+        resolves every alert to one of {facts.districts} districts in PostGIS, and uses an
+        ensemble of Claude, Gemini and Groq to write it in the language a household actually
+        speaks. Every alert carries specific guidance for {facts.livelihoods} livelihoods.
+        It reaches people over USSD, WhatsApp and an offline-capable web app.
       </p>
 
       <div class="mt-8 flex flex-wrap items-center gap-3">

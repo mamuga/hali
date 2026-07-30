@@ -4,26 +4,29 @@ import Nav from '../components/Nav.astro';
 import Hero from '../components/Hero.astro';
 import Problem from '../components/Problem.astro';
 import Pipeline from '../components/Pipeline.astro';
+import Demo from '../components/Demo.astro';
+import Sources from '../components/Sources.astro';
 import Capabilities from '../components/Capabilities.astro';
 import Ecosystem from '../components/Ecosystem.astro';
 import Stack from '../components/Stack.astro';
-import Demo from '../components/Demo.astro';
 import Footer from '../components/Footer.astro';
 ---
 
 <Base
   title="HALI — early warning for the IGAD region"
-  description="Satellite hazard data from 5 sources, translated into 10 languages by an AI ensemble and delivered over USSD, WhatsApp and an offline web app. No registration."
+  description="Hazard data from 13 sources, resolved to 891 districts, translated into 10 languages by an AI ensemble and delivered over USSD, WhatsApp and an offline web app. No registration."
 >
   <Nav />
   <main>
     <Hero />
     <Problem />
     <Pipeline />
+    <!-- Video sits before the screenshot-heavy sections so every later shot reads in context. -->
+    <Demo />
+    <Sources />
     <Capabilities />
     <Ecosystem />
     <Stack />
-    <Demo />
   </main>
   <Footer />
 </Base>
