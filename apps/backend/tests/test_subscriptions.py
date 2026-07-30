@@ -27,8 +27,12 @@ def test_normalise_phone_unifies_channel_formats():
 def test_truncate_keeps_one_sms_segment():
     assert sms.truncate("short") == "short"
     long_message = "a" * 300
-    assert len(sms.truncate(long_message)) == sms.SMS_MAX_LENGTH
-    assert sms.truncate(long_message).endswith("…")
+    truncated = sms.truncate(long_message)
+    assert len(truncated) == sms.SMS_MAX_LENGTH
+    assert truncated.endswith(sms.TRUNCATION_MARKER)
+    # The point of the limit: one segment. A non-GSM-7 marker would force the
+    # whole message into UCS-2, where 160 characters cost three segments.
+    assert truncated.isascii()
 
 
 def test_mask_hides_subscriber_number():

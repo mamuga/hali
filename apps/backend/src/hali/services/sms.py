@@ -15,8 +15,15 @@ from hali.config import settings
 logger = structlog.get_logger(__name__)
 
 # A single SMS segment is 160 GSM-7 characters; staying inside one segment keeps
-# cost predictable when broadcasting to a large subscriber list.
+# cost predictable when broadcasting to a large subscriber list. A character
+# outside GSM-7 forces the message into UCS-2, where a segment holds only 70 —
+# so a 160-character body then costs three segments, not one.
 SMS_MAX_LENGTH = 160
+
+# Deliberately ASCII, for the reason above: a "…" here would be the single
+# character that tips an otherwise GSM-7 message into UCS-2, tripling the cost
+# of the broadcast this limit exists to contain.
+TRUNCATION_MARKER = "..."
 
 _sms_client: Any = None
 
@@ -36,7 +43,7 @@ def _get_client() -> Any:
 def truncate(text: str, limit: int = SMS_MAX_LENGTH) -> str:
     if len(text) <= limit:
         return text
-    return text[: limit - 1].rstrip() + "…"
+    return text[: limit - len(TRUNCATION_MARKER)].rstrip() + TRUNCATION_MARKER
 
 
 async def send_sms(phone_number: str, message: str) -> bool:
