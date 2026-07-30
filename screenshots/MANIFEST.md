@@ -29,12 +29,19 @@ alert in Railway PostGIS and verified through `/api/alerts/{id}/action-card`.
 | `08b-alert-in-swahili-or-amharic.png` | #8 | captured live — Swahili alert and action content |
 | `09-alert-feed-mobile-dark.png` | #9 | captured live — 390x844 dark-mode viewport |
 | `10-whatsapp-conversation` | #10 | MANUAL — requires WhatsApp Web/phone session |
-| `11-ussd-simulator` | #11 | MANUAL — requires Africa’s Talking dashboard login |
+| `11a-ussd-main-menu.png` | #11 | captured live — AT sandbox simulator, `*384*97980#` |
+| `11b-ussd-alert-livelihood-menu.png` | #11 | captured live — live RED drought alert, all 7 livelihood options |
 | `12-architecture-diagram.png` | #12 | captured/generated from the documented HALI stack; editable SVG source included |
 | `13-report-submit-toast.png` | #13 | captured live — Sonner success toast after submission |
 | `14-admin-ai-stats.png` | #14 | captured live — formatted response from protected Railway endpoint |
 | `15-landing-hero.png` | #15 | captured live — Railway landing site |
 
-Total automated/live captures: 12/15. Total requiring manual platform access:
-2/15. Slot #12 is a designed architecture asset based on the implemented stack,
-not a screenshot of a live UI.
+Slot #11 was captured by hand in the Africa's Talking sandbox simulator against
+the live channel `*384*97980#`, whose callback points at the deployed backend
+(`https://backend-production-a6cf.up.railway.app/ussd`). Both frames are real
+gateway responses, not mockups: the alert menu shows a live RED drought alert
+from the ingestion pipeline.
+
+Total automated/live captures: 14/15. Total requiring manual platform access:
+1/15 (#10, WhatsApp). Slot #12 is a designed architecture asset based on the
+implemented stack, not a screenshot of a live UI.
