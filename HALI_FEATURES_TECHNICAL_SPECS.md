@@ -675,18 +675,20 @@ No internet. Works on a 2010 Nokia.
 
 **Technical setup:**
 ```
-Africa's Talking dashboard:
-  Service code: *XXX# (assigned by AT)
-  Callback URL: https://backend.railway.app/ussd
+Africa's Talking dashboard (sandbox, live):
+  Service code: *384*97980#
+  Callback URL: https://backend-production-a6cf.up.railway.app/ussd
   Method: POST
-  Sandbox: use AT sandbox for testing
+  Sandbox: dial the code in the AT web simulator
 
 FastAPI endpoint: POST /ussd
 Response format:
   CON <text>   = continue session (show menu)
   END <text>   = terminate session (final message)
 Response timeout: < 3 seconds (AT kills session at 3s)
-Max chars per page: 182
+Max chars per page: 182 in GSM-7, 80 once the page holds any character
+  outside that alphabet — which every non-Latin translation does. The page
+  helper derives the limit from the content; see routers/ussd.py.
 ```
 
 **Menu tree:**
