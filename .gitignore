@@ -55,5 +55,8 @@ judge-packet/
 judge-packet-src/
 *.zip
 
+# Internal project documentation
+docs/
+
 # One-off scratch capture script
 _shot.mjs
