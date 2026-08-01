@@ -18,12 +18,8 @@ Built for the IGAD Hackathon 2026.
 | **API** | https://backend-production-a6cf.up.railway.app |
 | **Demo video** | https://youtu.be/PvYecG0rPMk |
 
-### Documentation
+### Project policies
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — features and technical specifications
-- [docs/SPATIAL_INTELLIGENCE.md](docs/SPATIAL_INTELLIGENCE.md) — spatial capability audit, run against the live production system
-- [docs/BRAND.md](docs/BRAND.md) — voice, and the rule that every published figure must cite a source
-- [docs/engineering-log/](docs/engineering-log/) — the as-run plans and agent prompts used to build this
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 `apps/landing/src/data/site.ts` is the single source of truth for every count in
